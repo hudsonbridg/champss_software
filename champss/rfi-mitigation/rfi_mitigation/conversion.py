@@ -1,6 +1,7 @@
 # Deprecated functions moved here to free sps-common from spshuff dependency
 import sys
 
+import importlib
 from spshuff import l1_io
 from sps_common.filterbank import write_to_filterbank
 from astropy import units as u

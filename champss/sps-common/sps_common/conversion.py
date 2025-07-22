@@ -2,6 +2,7 @@ import re
 
 import h5py
 import numpy as np
+from astropy.time import Time
 
 
 def convert_ra_dec(ra_deg, dec_deg):

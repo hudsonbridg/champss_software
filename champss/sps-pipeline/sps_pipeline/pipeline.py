@@ -43,9 +43,7 @@ from sps_pipeline import (  # ps,
     beamform,
     cands,
     cleanup,
-    hhat,
     ps_cumul_stack,
-    rfi,
     utils,
 )
 
@@ -181,11 +179,6 @@ def dbexcepthook(type, value, tb):
     help="Whether to use fdmt for dedispersion",
 )
 @click.option(
-    "--rfi-beamform/--no-rfi-beamform",
-    default=True,
-    help="Whether to run rfi mitigation during beamforming instead of separately",
-)
-@click.option(
     "--plot/--no-plot",
     default=False,
     help="Whether to create candidate plots",
@@ -201,7 +194,7 @@ def dbexcepthook(type, value, tb):
 @click.argument(
     "components",
     type=click.Choice(
-        ["all", "quant", "rfi", "beamform", "dedisp", "ps", "hhat", "search", "cleanup"]
+        ["all", "rfi", "beamform", "dedisp", "ps", "search", "cleanup"]
     ),
     nargs=-1,
 )
@@ -316,7 +309,6 @@ def main(
     date,
     stack,
     fdmt,
-    rfi_beamform,
     plot,
     plot_threshold,
     ra,
@@ -348,15 +340,11 @@ def main(
     Subcommands:
     - all: run all components (default)
 
-    - rfi: run only RFI excision
-
     - beamform: run only the beamformer
 
     - dedisp: run only the dedisperser
 
     - ps: run only power spectrum computation
-
-    - hhat: run only Hhat computation
 
     - search: run only the search
 
@@ -510,14 +498,6 @@ def main(
         assert date.date() == utils.transit_time(active_pointings[0]).date()
 
         global active_process
-        # RFI clean the data first
-        if "quant" in components:
-            nchan = max([p.nchan for p in active_pointings])
-            beams_start_end = rfi.get_data_to_clean(active_pointings)
-            run_quant(beams_start_end, nchan)
-        if "rfi" in components and not rfi_beamform:
-            beams_start_end = rfi.get_data_to_clean(active_pointings)
-            rfi.run(beams_start_end, config, basepath)
         N_ap = len(active_pointings)
         if N_ap > 1:
             log.info(
@@ -578,7 +558,7 @@ def main(
                 fdmt = False
             if "beamform" in components:
                 beamformer = beamform.initialise(
-                    config, rfi_beamform, basepath, datpath
+                    config, "rfi" in components, basepath, datpath
                 )
                 skybeam, spectra_shared = beamform.run(
                     active_pointing, beamformer, fdmt, num_threads, basepath
@@ -677,15 +657,9 @@ def main(
                 del power_spectra
             else:
                 power_spectra = None
-            if "hhat" in components:
-                hhat.run(active_pointing)
             if "cleanup" in components:
                 clean_up = cleanup.CleanUp(**OmegaConf.to_container(config.cleanup))
                 clean_up.remove_files(active_pointing)
-                if config.cleanup_rfi:
-                    cleanup.cleanup_rfi(
-                        active_pointing.max_beams,
-                    )
             # finishing the observation -- update its status to completed
             if processing_failed:
                 final_status = models.ObservationStatus.failed.value
@@ -1187,16 +1161,6 @@ def find_pointing_with_data(
                 print(f"{ap.ra:.2f} {ap.dec:.2f}")
     if not istheredata:
         print("There are no pointings with data to process for the given beam rows")
-
-
-def run_quant(utc_start, utc_end, beam_row, nchan):
-    """Quantize L1 data for the `pointing`."""
-    try:
-        from sps_pipeline import quant
-    except ImportError:
-        log.error("`ch_frb_l1` is a required dependency for quantization this step.")
-        sys.exit(1)
-    quant.run(utc_start, utc_end, beam_row, nchan)
 
 
 if __name__ == "__main__":

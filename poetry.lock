@@ -3243,7 +3243,7 @@ description = "CHIME SPS Common Code"
 optional = false
 python-versions = ">=3.10,<3.12"
 files = []
-develop = false
+develop = true
 
 [package.dependencies]
 astropy = "~6.1"
@@ -3812,4 +3812,4 @@ beam-model = ["beam-model"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "70e47d80c0103e0ba9a223de014e439147452a3cf8db86e42822e7f1db9e4219"
+content-hash = "1c97019cb8da843b4e40aa3cd30a721829b01e68a783b4eaebf0936446b23fda"

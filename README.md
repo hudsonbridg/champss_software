@@ -32,7 +32,7 @@ cd champss/beamformer
 pip install -e . --no-deps
 ```
 
-Due to the local paths in the pyproject.toml the full software suite cannot be installed as a dependency. But sps-common can be installed.
+Due to the relative paths in the pyproject.toml the full software suite cannot be installed as a dependency (when using poetry at least). But sps-common can be installed as dependency in other projects.
 
 ### Running Workflow Scripts
 

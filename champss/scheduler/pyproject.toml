@@ -3,7 +3,7 @@ name = "scheduler"
 version = "1.0.0"
 description = "CHAMPSS Scheduler"
 authors = ["CHIME SPS <chime_spawg@physics.mcgill.>"]
-license = "GPLv3"
+license = "GPL-3.0-only"
 readme = "README.md"
 exclude = [
     "tests"

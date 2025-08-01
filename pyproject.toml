@@ -1,42 +1,64 @@
-[tool.poetry]
+[project]
 name = "champss"
 version = "0.13.0"
 description = "CHAMPSS Codebase"
-authors = ["CHAMPSS <chime_spawg@physics.mcgill.>"]
-license = "GPLv3"
+requires-python = ">=3.10,<3.12"
 readme = "README.md"
-exclude = [
-    "tests"
+license = "GPL-3.0-only"
+dependencies = [
+    "beamformer",
+    "candidate-processor",
+    "controller",
+    "dmt",
+    "folding",
+    "ps-processes",
+    "rfi-mitigation",
+    "scheduler",
+    "spshuff",
+    "sps-common",
+    "sps-databases",
+    "sps-dedispersion",
+    "sps-multi-pointing",
+    "sps_pipeline",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.10,<3.12"
-beamformer = {path = "./champss/beamformer", develop=true}
-candidate-processor = {path = "./champss/candidate-processor", develop=true}
-controller = {path = "./champss/controller", develop=true}
-dmt = {git = "https://github.com/chime-sps/dmt.git"}
-folding = {path = "./champss/folding", develop=true}
-ps-processes = {path = "./champss/ps-processes", develop=true}
-rfi-mitigation = {path = "./champss/rfi-mitigation", develop=true}
-scheduler = {path = "./champss/scheduler", develop=true}
-spshuff = {path = "./champss/spshuff", develop=true}
-sps-common = {path = "./champss/sps-common", develop=true}
-sps-databases = {path = "./champss/sps-databases", develop=true}
-sps-dedispersion = {path = "./champss/sps-dedispersion", develop=true}
-sps-multi-pointing = {path = "./champss/multi-pointing", develop=true}
-sps_pipeline = {path = "./champss/sps-pipeline", develop=true}
-beam-model = {git = "ssh://git@github.com/CHIMEFRB/beam-model", optional=true}
-
-[tool.poetry.extras]
+[project.optional-dependencies]
 beam-model = ["beam-model"]
 
-[tool.poetry.group.dev.dependencies]
-commitizen = "^3.4.0"
-mypy = "^1.4.0"
-pre-commit = "^3.3.3"
-pytest = "^7.3.2"
+[dependency-groups]
+dev = [
+    "commitizen>=3.4.0,<4",
+    "mypy>=1.4.0,<2",
+    "pre-commit>=3.3.3,<4",
+    "pytest>=7.3.2,<8",
+]
+
+[tool.uv]
+
+[tool.uv.sources]
+beamformer = { path = "./champss/beamformer", editable = true }
+beam-model = { git = "git+ssh://git@github.com/CHIMEFRB/beam-model.git"}
+candidate-processor = { path = "./champss/candidate-processor", editable = true }
+controller = { path = "./champss/controller", editable = true }
+dmt = { git = "https://github.com/chime-sps/dmt.git" }
+folding = { path = "./champss/folding", editable = true }
+ps-processes = { path = "./champss/ps-processes", editable = true }
+rfi-mitigation = { path = "./champss/rfi-mitigation", editable = true }
+scheduler = { path = "./champss/scheduler", editable = true }
+spshuff = { path = "./champss/spshuff", editable = true }
+sps-common = { path = "./champss/sps-common", editable = true }
+sps-databases = { path = "./champss/sps-databases", editable = true }
+sps-dedispersion = { path = "./champss/sps-dedispersion", editable = true }
+sps-multi-pointing = { path = "./champss/multi-pointing", editable = true }
+sps_pipeline = { path = "./champss/sps-pipeline", editable = true }
+
+[tool.hatch.build.targets.sdist]
+exclude = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+exclude = ["tests"]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 

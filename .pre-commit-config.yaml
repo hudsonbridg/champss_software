@@ -10,12 +10,12 @@ repos:
           - --ignore=F841
       - id: ruff-format # formatter
 
-  # Makes sure the poetry.lock file is up-to-date
-  - repo: https://github.com/python-poetry/poetry
-    rev: 1.6.1
+repos:
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    # uv version.
+    rev: 0.8.4
     hooks:
-      - id: poetry-check
-      - id: poetry-lock
+      - id: uv-lock
 
   # Ensures that the commit message follows the Conventional Commits standard, neccessary for release automation
   - repo: https://github.com/commitizen-tools/commitizen

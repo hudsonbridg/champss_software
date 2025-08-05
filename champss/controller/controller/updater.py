@@ -4,7 +4,6 @@ import logging
 import math
 import os
 import signal
-import subprocess  # nosec
 
 import pytz
 import trio
@@ -14,7 +13,9 @@ from controller.l1_rpc import get_beam_ip
 log = logging.getLogger("issuer")
 
 
-async def pointing_beam_control(new_pointing_listen, pointing_done_announce, basepath, source="champss"):
+async def pointing_beam_control(
+    new_pointing_listen, pointing_done_announce, basepath, source="champss"
+):
     """
     Task that issues beam pointing updates on a generated schedule.
 
@@ -126,6 +127,11 @@ async def pointing_beam_control(new_pointing_listen, pointing_done_announce, bas
                         )
                     except FileNotFoundError:
                         folder_age = max_combined_age + 1
+                    # If node has been restarted new client is needed
+                    if folder_age > max_combined_age:
+                        log.info(f"Created new RPC client object for {b.beam}")
+                        client = rpc_client.RpcClient({})
+                        client.add_server(b.beam, f"tcp://{get_beam_ip(b.beam)}:5555")
                 # Only update if folder and recent update are old, otherwise, will perform too many calls
                 combined_age = min(update_age, folder_age)
                 if combined_age > max_combined_age:

@@ -8,7 +8,7 @@ threads:
 rfi:
   weights: True      # apply msgpack weights
   l1: True           # apply L1 RFI mask
-  badchan: True      # apply known bad channel mask
+  badchan: False     # apply known bad channel mask
   kurtosis: False    # do NOT run temporal kurtosis filter
   mad: False         # do NOT run median absolute deviation outlier filter
   sk: True           # run spectral kurtosis filter

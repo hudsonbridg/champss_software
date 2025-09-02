@@ -51,4 +51,4 @@ jobs:
         run: |
           apptainer build /data/chime/sps/apptainer/champss_${{ needs.check-release.outputs.release_tag }}.sif \
             docker://chimefrb/champss_software:${{ needs.check-release.outputs.release_tag }}
-            
+

@@ -34,21 +34,9 @@ jobs:
   # Build "latest" Singularity image from DockerHub
   singularity-latest:
     needs: latest-image
-    runs-on: [self-hosted, sps-compute2]
+    runs-on: [self-hosted, sps-archiver1]
     steps:
       - name: Build latest Singularity image
         run: |
           /usr/bin/apptainer build /data/chime/sps/apptainer/champss_software.sif \
             docker://chimefrb/champss_software:latest
-
-  # Build a release-tagged Singularity image from DockerHub
-  singularity-release:
-    needs: version-image
-    if: ${{ needs.check-release.outputs.release_created == 'true' }}
-    runs-on: self-hosted
-    steps:
-      - name: Build release-tagged Singularity image
-        run: |
-          apptainer build /data/chime/sps/apptainer/champss_${{ needs.check-release.outputs.release_tag }}.sif \
-            docker://chimefrb/champss_software:${{ needs.check-release.outputs.release_tag }}
-

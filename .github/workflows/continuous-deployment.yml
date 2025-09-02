@@ -34,7 +34,7 @@ jobs:
   # Build "latest" Singularity image from DockerHub
   singularity-latest:
     needs: latest-image
-    runs-on: self-hosted
+    runs-on: [self-hosted, sps-compute2]
     steps:
       - name: Build latest Singularity image
         run: |

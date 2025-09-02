@@ -27,16 +27,3 @@ jobs:
       # E.g. v1.0.0, only set if merging automated release PR
       image_tag: ${{ needs.check-release.outputs.release_tag || 'none' }}
       build_locally: false
-
-
-  # === Singularity images (on your self-hosted runner) ===
-
-  # Build "latest" Singularity image from DockerHub
-  singularity-latest:
-    needs: latest-image
-    runs-on: [self-hosted, sps-archiver1]
-    steps:
-      - name: Build latest Singularity image
-        run: |
-          /usr/bin/apptainer build /data/chime/sps/apptainer/champss_software.sif \
-            docker://chimefrb/champss_software:latest

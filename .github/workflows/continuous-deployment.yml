@@ -28,3 +28,27 @@ jobs:
       image_tag: ${{ needs.check-release.outputs.release_tag || 'none' }}
       build_locally: false
 
+
+  # === Singularity images (on your self-hosted runner) ===
+
+  # Build "latest" Singularity image from DockerHub
+  singularity-latest:
+    needs: latest-image
+    runs-on: self-hosted
+    steps:
+      - name: Build latest Singularity image
+        run: |
+          apptainer build /data/chime/sps/apptainer/champss_software.sif \
+            docker://chimefrb/champss_software:latest
+
+  # Build a release-tagged Singularity image from DockerHub
+  singularity-release:
+    needs: version-image
+    if: ${{ needs.check-release.outputs.release_created == 'true' }}
+    runs-on: self-hosted
+    steps:
+      - name: Build release-tagged Singularity image
+        run: |
+          apptainer build /data/chime/sps/apptainer/champss_${{ needs.check-release.outputs.release_tag }}.sif \
+            docker://chimefrb/champss_software:${{ needs.check-release.outputs.release_tag }}
+            

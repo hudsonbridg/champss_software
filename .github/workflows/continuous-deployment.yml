@@ -36,6 +36,8 @@ jobs:
     needs: latest-image
     runs-on: self-hosted
     steps:
+      - name: Add Apptainer to PATH
+        run: echo "/usr/bin" >> $GITHUB_PATH
       - name: Build latest Singularity image
         run: |
           apptainer build /data/chime/sps/apptainer/champss_software.sif \

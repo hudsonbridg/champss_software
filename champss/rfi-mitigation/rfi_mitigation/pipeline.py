@@ -355,7 +355,6 @@ class RFIGlobalPipeline:
         mask_shared_name,
         spectra_shape,
         spec_dtype,
-        raw_spec_slices,
     ):
         """
         Run the requested global cleaners on the full beamformed dataset.
@@ -392,7 +391,7 @@ class RFIGlobalPipeline:
                 stddev_start = time.time()
                 log.debug("Global StdDev Channel clean START")
                 cleaner = cleaners.StdDevChannelCleaner(spectra_shape)
-                cleaner.clean(spectra_shared_name, mask_shared_name, spectra_shape, spec_dtype, raw_spec_slices)
+                cleaner.clean(spectra_shared_name, mask_shared_name, spectra_shape, spec_dtype)
 
                 # Re-access mask after cleaner modifies it
                 shared_mask = shared_memory.SharedMemory(name=mask_shared_name)

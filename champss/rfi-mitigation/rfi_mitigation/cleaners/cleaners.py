@@ -607,15 +607,22 @@ class StdDevChannelCleaner(Cleaner):
         # Compute standard deviation across normalized bins for each channel
         channel_stds = np.nanstd(normalized_binned, axis=1)
 
+        # Replace NaN stds with 0 for heavily-flagged channels
+        channel_stds[np.isnan(channel_stds)] = 0
+
         print(f"DEBUG: channel_stds min/max/median: {np.nanmin(channel_stds)}/{np.nanmax(channel_stds)}/{np.nanmedian(channel_stds)}")
 
         # Always compute statistics from only the cleaner channels (those with <50% flagged)
         # to avoid biased estimates when many channels are already heavily flagged
         clean_channel_stds = channel_stds[~heavily_flagged_channels]
+        # Remove zeros from clean channels for statistics
+        clean_channel_stds = clean_channel_stds[clean_channel_stds > 0]
 
         if len(clean_channel_stds) == 0:
             log.error("No clean channels available for statistics - skipping cleaner")
             self.cleaned = True
+            shared_spectra.close()
+            shared_mask.close()
             return
 
         log.debug(
@@ -624,7 +631,7 @@ class StdDevChannelCleaner(Cleaner):
         )
 
         # Normalize std by its median (like in the working snippet)
-        std_median = np.median(clean_channel_stds)
+        std_median = np.nanmedian(clean_channel_stds)
         print(f"DEBUG: std_median = {std_median}")
         print(f"DEBUG: clean_channel_stds min/max = {clean_channel_stds.min()}/{clean_channel_stds.max()}")
         print(f"DEBUG: Number of zero stds: {np.sum(channel_stds == 0)}")
@@ -686,6 +693,12 @@ class StdDevChannelCleaner(Cleaner):
         # Update the cleaner mask - flag entire channels
         self.cleaner_mask[bad_channels, :] = True
         print(f"DEBUG: Cleaner mask shape: {self.cleaner_mask.shape}, sum: {self.cleaner_mask.sum()}")
+
+        # Also update the shared memory mask directly
+        print(f"DEBUG: rfi_mask sum before applying cleaner: {rfi_mask.sum()}")
+        rfi_mask[bad_channels, :] = True
+        print(f"DEBUG: rfi_mask sum after applying cleaner: {rfi_mask.sum()}")
+
         self.cleaned = True
 
         # Close shared memory handles

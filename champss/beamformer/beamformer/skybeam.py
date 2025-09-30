@@ -410,6 +410,11 @@ class SkyBeamFormer:
                 "Global RFI cleaning finished. New masking Fraction:"
                 f" {(rfi_mask.sum() / rfi_mask.size):.4f}"
             )
+
+            # Apply the updated mask to the spectra (zero out newly masked regions)
+            log.info("Applying global RFI mask to spectra")
+            spectra[rfi_mask] = 0
+
         completely_masked_channels = rfi_mask.min(axis=1).sum()
         log.info(
             "Fraction of completely masked channels:"

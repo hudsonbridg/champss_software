@@ -432,24 +432,6 @@ class RFIGlobalPipeline:
                 cleaner = cleaners.MedianFilterChannelCleaner(spectra_shape)
                 cleaner.clean(spectra_shared_name, mask_shared_name, spectra_shape, spec_dtype)
 
-                # Re-access mask after cleaner modifies it
-                shared_mask = shared_memory.SharedMemory(name=mask_shared_name)
-                rfi_mask = np.ndarray(spectra_shape, dtype=bool, buffer=shared_mask.buf)
-                before_masked_frac = rfi_mask.mean()
-
-                print(f"DEBUG: MedianFilter - Before combining - rfi_mask sum: {rfi_mask.sum()}")
-                print(f"DEBUG: MedianFilter - Cleaner mask sum: {cleaner.get_mask().sum()}")
-
-                rfi_mask[:], masked_frac = combine_cleaner_masks(
-                    np.array([rfi_mask, cleaner.get_mask()])
-                )
-
-                print(f"DEBUG: MedianFilter - After combining - rfi_mask sum: {rfi_mask.sum()}")
-
-                masked_frac = rfi_mask.mean()
-                unique_masked_frac = masked_frac - before_masked_frac
-                log.debug(f"unique masked frac = {unique_masked_frac:g}")
-                log.debug(f"total masked frac = {masked_frac:g}")
                 log.debug("Global Median Filter Channel clean END")
                 medianfilter_end = time.time()
                 medianfilter_runtime = medianfilter_end - medianfilter_start
@@ -460,9 +442,12 @@ class RFIGlobalPipeline:
                 log.debug(
                     f"Corresponds to {1000 * medianfilter_time_per_chan} ms per channel"
                 )
-                shared_mask.close()
 
+        # Re-access mask for final reporting
+        shared_mask = shared_memory.SharedMemory(name=mask_shared_name)
+        rfi_mask = np.ndarray(spectra_shape, dtype=bool, buffer=shared_mask.buf)
         log.info(f"final flagged fraction = {rfi_mask.mean():g}")
+        shared_mask.close()
 
         cleaning_end = time.time()
         log.debug(f"Took {cleaning_end - cleaning_start} seconds to clean full data")

@@ -607,6 +607,10 @@ class StdDevChannelCleaner(Cleaner):
 
         # Normalize std by its median (like in the working snippet)
         std_median = np.median(clean_channel_stds)
+        print(f"DEBUG: std_median = {std_median}")
+        print(f"DEBUG: clean_channel_stds min/max = {clean_channel_stds.min()}/{clean_channel_stds.max()}")
+        print(f"DEBUG: Number of zero stds: {np.sum(channel_stds == 0)}")
+
         if std_median == 0:
             log.warning("Median std is zero - skipping cleaner")
             self.cleaned = True
@@ -615,10 +619,23 @@ class StdDevChannelCleaner(Cleaner):
         normalized_channel_stds = channel_stds / std_median
         normalized_clean_stds = clean_channel_stds / std_median
 
+        print(f"DEBUG: normalized_channel_stds min/max = {normalized_channel_stds.min()}/{normalized_channel_stds.max()}")
+
+        # Write out channel stds for debugging
+        np.save('channel_stds_debug.npy', {
+            'channel_stds': channel_stds,
+            'normalized_channel_stds': normalized_channel_stds,
+            'clean_channel_stds': clean_channel_stds,
+            'heavily_flagged_channels': heavily_flagged_channels,
+            'channel_mask_fractions': channel_mask_fractions
+        })
+        print("DEBUG: Saved channel std data to channel_stds_debug.npy")
+
         # Use MAD for robust statistics on normalized std values
         # Compute MAD of (normalized_std - 1) to detect deviations from typical behavior
         std_deviations = normalized_clean_stds - 1.0
         std_mad = median_absolute_deviation(std_deviations)[1]  # Get just the MAD value
+        print(f"DEBUG: std_mad = {std_mad}")
         log.debug(f"Normalized channel std median: 1.0 (by design), MAD of deviations: {std_mad:.3f}")
 
         # Flag channels where deviation from 1.0 exceeds threshold

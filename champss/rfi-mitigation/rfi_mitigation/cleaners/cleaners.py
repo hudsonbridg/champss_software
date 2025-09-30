@@ -543,27 +543,92 @@ class StdDevChannelCleaner(Cleaner):
             cleaned=self.cleaned,
         )
 
-    def clean(self, spectra, rfi_mask):
+    def compute_chunk_mean(
+        self,
+        spectra_shared_name,
+        spectra_shape,
+        spec_dtype,
+        chunk_slice,
+    ):
+        """
+        Compute mean within a time chunk for each channel.
+
+        Returns (nchan,) array of chunk means.
+        """
+        from multiprocessing import shared_memory
+
+        shared_spectra = shared_memory.SharedMemory(name=spectra_shared_name)
+        spectra = np.ndarray(spectra_shape, dtype=spec_dtype, buffer=shared_spectra.buf)
+
+        # Get this chunk
+        spectra_chunk = spectra[:, chunk_slice]
+
+        # Replace zeros with NaN
+        spectra_chunk = spectra_chunk.copy()
+        spectra_chunk[spectra_chunk == 0] = np.nan
+
+        # Compute mean for each channel in this chunk
+        chunk_mean = np.nanmean(spectra_chunk, axis=1)
+
+        shared_spectra.close()
+        return chunk_mean
+
+    def clean(self, spectra_shared_name, mask_shared_name, spectra_shape, spec_dtype, raw_spec_slices=None):
         """
         Flag channels based on anomalous standard deviation across full pointing.
 
         Parameters
         ----------
-        spectra : np.ndarray
-            The intensity data (nchan, ntime)
-        rfi_mask : np.ndarray
-            Current RFI mask (nchan, ntime)
+        spectra_shared_name : str
+            Name of shared memory for spectra
+        mask_shared_name : str
+            Name of shared memory for mask
+        spectra_shape : tuple
+            Shape of the spectra (nchan, ntime)
+        spec_dtype : dtype
+            Data type of spectra
+        raw_spec_slices : list of slice, optional
+            List of time slices to average within before computing std.
+            If None, uses 1024-sample chunks.
         """
+        from multiprocessing import shared_memory, Pool
+        from functools import partial
+
         log.info("Running Standard Deviation Channel cleaner")
 
-        # Replace zeros with small value to avoid issues with normalization
-        # (zeros typically indicate masked/filled regions after zero_replace)
-        spectra_work = np.copy(spectra)
-        spectra_work[spectra_work == 0] = np.nan
+        # Create default chunks if not provided
+        if raw_spec_slices is None:
+            chunk_size = 1024
+            nchunks = self.ntime // chunk_size
+            raw_spec_slices = [slice(i*chunk_size, (i+1)*chunk_size) for i in range(nchunks)]
+            if self.ntime % chunk_size != 0:
+                raw_spec_slices.append(slice(nchunks*chunk_size, self.ntime))
 
-        # Use masked array to ignore already-flagged data and NaN values
-        combined_mask = np.logical_or(rfi_mask, np.isnan(spectra_work))
-        masked_spectra = np.ma.array(spectra_work, mask=combined_mask)
+        print(f"DEBUG: Using {len(raw_spec_slices)} time chunks for averaging")
+
+        # Access shared memory
+        shared_spectra = shared_memory.SharedMemory(name=spectra_shared_name)
+        spectra = np.ndarray(spectra_shape, dtype=spec_dtype, buffer=shared_spectra.buf)
+        shared_mask = shared_memory.SharedMemory(name=mask_shared_name)
+        rfi_mask = np.ndarray(spectra_shape, dtype=bool, buffer=shared_mask.buf)
+
+        # Compute chunk means in parallel
+        pool = Pool()
+        chunk_means_list = pool.map(
+            partial(
+                self.compute_chunk_mean,
+                spectra_shared_name,
+                spectra_shape,
+                spec_dtype,
+            ),
+            raw_spec_slices,
+        )
+        pool.close()
+        pool.join()
+
+        # Stack into array: (nchan, nchunks)
+        chunk_means_array = np.column_stack(chunk_means_list)
+        print(f"DEBUG: chunk_means_array shape: {chunk_means_array.shape}")
 
         # Check the fraction of channels that are already heavily flagged
         channel_mask_fractions = rfi_mask.mean(axis=1)
@@ -576,20 +641,17 @@ class StdDevChannelCleaner(Cleaner):
             f"already have >50% of samples flagged"
         )
 
-        # Compute time-averaged mean for each channel
-        channel_means = np.ma.mean(masked_spectra, axis=1, keepdims=True)
+        # Compute global mean for each channel across all chunks (ignoring NaNs)
+        channel_means = np.nanmean(chunk_means_array, axis=1)
 
-        # Normalize by dividing by the mean to remove bandpass structure
-        # Avoid division by zero
-        channel_means_filled = channel_means.filled(1.0)
-        channel_means_filled[channel_means_filled == 0] = 1.0
-        normalized_spectra = masked_spectra / channel_means_filled
+        # Normalize chunk means by dividing by global mean to remove bandpass structure
+        channel_means[channel_means == 0] = 1.0
+        normalized_chunk_means = chunk_means_array / channel_means[:, np.newaxis]
 
-        # Compute standard deviation for each normalized channel across all time
-        channel_stds = np.ma.std(normalized_spectra, axis=1)
+        # Compute standard deviation across normalized chunks for each channel
+        channel_stds = np.nanstd(normalized_chunk_means, axis=1)
 
-        # Handle case where all data in a channel is masked
-        channel_stds = channel_stds.filled(0)
+        print(f"DEBUG: channel_stds min/max/median: {np.nanmin(channel_stds)}/{np.nanmax(channel_stds)}/{np.nanmedian(channel_stds)}")
 
         # Always compute statistics from only the cleaner channels (those with <50% flagged)
         # to avoid biased estimates when many channels are already heavily flagged
@@ -669,6 +731,10 @@ class StdDevChannelCleaner(Cleaner):
         self.cleaner_mask[bad_channels, :] = True
         print(f"DEBUG: Cleaner mask shape: {self.cleaner_mask.shape}, sum: {self.cleaner_mask.sum()}")
         self.cleaned = True
+
+        # Close shared memory handles
+        shared_spectra.close()
+        shared_mask.close()
 
 
 class PowerSpectrumCleaner(Cleaner):

@@ -355,6 +355,7 @@ class RFIGlobalPipeline:
         mask_shared_name,
         spectra_shape,
         spec_dtype,
+        raw_spec_slices,
     ):
         """
         Run the requested global cleaners on the full beamformed dataset.
@@ -390,8 +391,12 @@ class RFIGlobalPipeline:
             with rfi_processing_time.labels("stddev_channel_global", "0").time():
                 stddev_start = time.time()
                 log.debug("Global StdDev Channel clean START")
-                cleaner = cleaners.StdDevChannelCleaner(spectra.shape)
-                cleaner.clean(spectra, rfi_mask)
+                cleaner = cleaners.StdDevChannelCleaner(spectra_shape)
+                cleaner.clean(spectra_shared_name, mask_shared_name, spectra_shape, spec_dtype, raw_spec_slices)
+
+                # Re-access mask after cleaner modifies it
+                shared_mask = shared_memory.SharedMemory(name=mask_shared_name)
+                rfi_mask = np.ndarray(spectra_shape, dtype=bool, buffer=shared_mask.buf)
                 before_masked_frac = rfi_mask.mean()
 
                 print(f"DEBUG: Before combining - rfi_mask sum: {rfi_mask.sum()}")

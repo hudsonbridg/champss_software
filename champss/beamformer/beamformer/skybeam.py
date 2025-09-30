@@ -405,6 +405,7 @@ class SkyBeamFormer:
                 mask_shared.name,
                 spectra_shape,
                 spec_dtype,
+                raw_spec_slices,
             )
             log.info(
                 "Global RFI cleaning finished. New masking Fraction:"

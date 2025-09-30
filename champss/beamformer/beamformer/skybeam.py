@@ -11,7 +11,7 @@ import numpy as np
 from astropy.time import Time, TimeDelta
 from attr.validators import deep_iterable, instance_of
 from beamformer.utilities.common import get_data_list
-from rfi_mitigation.pipeline import RFIPipeline
+from rfi_mitigation.pipeline import RFIPipeline, RFIGlobalPipeline
 from scipy.signal import detrend
 from sps_common.constants import TSAMP
 from sps_common.interfaces.beamformer import SkyBeam
@@ -115,7 +115,7 @@ class SkyBeamFormer:
         ),
     )
     rfi_pipeline = attr.ib(init=False)
-    rfi_pipeline_postfill = attr.ib(init=False)
+    rfi_global_pipeline = attr.ib(init=False)
     max_mask_frac = attr.ib(default=1.0, validator=instance_of(float))
 
     @extn.validator
@@ -166,9 +166,9 @@ class SkyBeamFormer:
         """Create RFIPipeline instances."""
         if self.run_rfi_mitigation:
             self.rfi_pipeline = RFIPipeline(self.masking_dict, make_plots=False)
-            # Create second pipeline for post-fill cleaning with only stddev cleaner
-            postfill_masking_dict = {"stddev": True}
-            self.rfi_pipeline_postfill = RFIPipeline(postfill_masking_dict, make_plots=False)
+            # Create global pipeline for post-fill cleaning on full dataset
+            global_masking_dict = {"stddev": True}
+            self.rfi_global_pipeline = RFIGlobalPipeline(global_masking_dict, make_plots=False)
 
     def form_skybeam(self, active_pointing, num_threads=1):
         """
@@ -372,25 +372,21 @@ class SkyBeamFormer:
             )
         log.info("Finished filling and normalization.")
 
-        # Second RFI pass: run StdDevChannelCleaner on filled data
+        # Global RFI pass: run StdDevChannelCleaner on full filled dataset
         if self.run_rfi_mitigation:
-            log.info("Starting post-fill RFI cleaning (StdDevChannelCleaner).")
+            log.info("Starting global RFI cleaning on full dataset (StdDevChannelCleaner).")
             log.info(
-                "Pre-postfill masking Fraction:"
+                "Pre-global-clean masking Fraction:"
                 f" {(rfi_mask.sum() / rfi_mask.size):.4f}"
             )
-            pool.map(
-                partial(
-                    self.rfi_pipeline_postfill.clean,
-                    spectra_shared.name,
-                    mask_shared.name,
-                    spectra_shape,
-                    spec_dtype,
-                ),
-                raw_spec_slices,
+            self.rfi_global_pipeline.clean(
+                spectra_shared.name,
+                mask_shared.name,
+                spectra_shape,
+                spec_dtype,
             )
             log.info(
-                "Post-fill RFI cleaning finished. New masking Fraction:"
+                "Global RFI cleaning finished. New masking Fraction:"
                 f" {(rfi_mask.sum() / rfi_mask.size):.4f}"
             )
 

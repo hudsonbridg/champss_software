@@ -423,6 +423,24 @@ class SkyBeamFormer:
             log.info("Applying global RFI mask to spectra")
             spectra[rfi_mask] = 0
 
+            # Re-run zero replacement to fill newly masked regions
+            log.info("Re-running zero replacement after global RFI cleaning")
+            pool = Pool(num_threads)
+            pool.map(
+                partial(
+                    self.zero_replace_shared_spectra,
+                    spectra_shared.name,
+                    mask_shared.name,
+                    spectra_shape,
+                    spec_dtype,
+                    flatten_bandpass=self.flatten_bandpass,
+                ),
+                nsub_slices,
+            )
+            pool.close()
+            pool.join()
+            log.info("Zero replacement complete")
+
         # Optional timestream normalization
         if self.normalize_timestream:
             from scipy.ndimage import gaussian_filter1d

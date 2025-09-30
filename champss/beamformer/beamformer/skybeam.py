@@ -73,6 +73,12 @@ class SkyBeamFormer:
     flatten_bandpass: bool
         Whether to flatten the bandpass by normalising each channel. Default: False.
 
+    normalize_timestream: bool
+        Whether to normalize by frequency-averaged, gaussian-filtered timestream. Default: False.
+
+    normalize_gaussian_width: int
+        Width of gaussian filter (in samples) for timestream normalization. Default: 128
+
     update_db: bool
         Whether to update the database of RFI fraction in the skybeam. Default: True
 
@@ -108,6 +114,8 @@ class SkyBeamFormer:
     add_local_median = attr.ib(default=False, validator=instance_of(bool))
     beam_to_normalise = attr.ib(default=None)
     flatten_bandpass = attr.ib(default=False, validator=instance_of(bool))
+    normalize_timestream = attr.ib(default=False, validator=instance_of(bool))
+    normalize_gaussian_width = attr.ib(default=128, validator=instance_of(int))
     update_db = attr.ib(default=True, validator=instance_of(bool))
     min_data_frac = attr.ib(default=0.0, validator=instance_of(float))
     run_rfi_mitigation = attr.ib(default=True, validator=instance_of(bool))
@@ -414,6 +422,33 @@ class SkyBeamFormer:
             # Apply the updated mask to the spectra (zero out newly masked regions)
             log.info("Applying global RFI mask to spectra")
             spectra[rfi_mask] = 0
+
+        # Optional timestream normalization
+        if self.normalize_timestream:
+            from scipy.ndimage import gaussian_filter1d
+
+            log.info("Normalizing by frequency-averaged, gaussian-filtered timestream")
+
+            # Create a copy to avoid modifying masked data
+            spectra_work = np.copy(spectra)
+            spectra_work[rfi_mask] = np.nan
+
+            # Compute frequency-averaged timestream (ignoring NaNs/masked data)
+            timestream = np.nanmean(spectra_work, axis=0)
+
+            # Apply gaussian filter
+            timestream_filtered = gaussian_filter1d(timestream, sigma=self.normalize_gaussian_width, mode='nearest')
+
+            # Avoid division by zero
+            timestream_filtered[timestream_filtered == 0] = 1.0
+
+            # Normalize each channel by the filtered timestream
+            spectra[:] = spectra / timestream_filtered[np.newaxis, :]
+
+            # Re-zero the masked regions
+            spectra[rfi_mask] = 0
+
+            log.info("Timestream normalization complete")
 
         completely_masked_channels = rfi_mask.min(axis=1).sum()
         log.info(

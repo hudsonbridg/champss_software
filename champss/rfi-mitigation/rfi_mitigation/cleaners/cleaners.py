@@ -706,6 +706,145 @@ class StdDevChannelCleaner(Cleaner):
         shared_mask.close()
 
 
+class MedianFilterChannelCleaner(Cleaner):
+    """
+    Global RFI cleaner that uses median filtering on time-binned data.
+
+    This cleaner:
+    1. Bins data in time (default 1024 samples)
+    2. Applies median filter along time for each channel
+    3. Computes residual between data and filtered version
+    4. Flags samples where residual exceeds threshold * MAD
+    """
+
+    def __init__(
+        self,
+        spectra_shape,
+        threshold: float = 5.0,
+        median_window: int = 5,
+    ):
+        """
+        Initialize the MedianFilterChannelCleaner.
+
+        Parameters
+        ----------
+        spectra_shape : tuple
+            Shape of the spectra (nchan, ntime)
+        threshold : float
+            Number of MAD units beyond which samples are flagged.
+            Default: 5.0
+        median_window : int
+            Window size for median filter. Default: 5
+        """
+        super().__init__(spectra_shape)
+        self.threshold = threshold
+        self.median_window = median_window
+
+    def summary(self):
+        return dict(
+            nchan=self.nchan,
+            ntime=self.ntime,
+            nsamp=self.nsamp,
+            threshold=self.threshold,
+            median_window=self.median_window,
+            nmasked=self.cleaner_mask.sum(),
+            cleaned=self.cleaned,
+        )
+
+    def clean(self, spectra_shared_name, mask_shared_name, spectra_shape, spec_dtype, time_bin=1024):
+        """
+        Flag RFI based on median-filtered residuals.
+
+        Parameters
+        ----------
+        spectra_shared_name : str
+            Name of shared memory for spectra
+        mask_shared_name : str
+            Name of shared memory for mask
+        spectra_shape : tuple
+            Shape of the spectra (nchan, ntime)
+        spec_dtype : dtype
+            Data type of spectra
+        time_bin : int
+            Number of time samples to average together. Default: 1024
+        """
+        from multiprocessing import shared_memory
+        from scipy.ndimage import median_filter
+
+        log.info("Running Median Filter Channel cleaner")
+
+        # Access shared memory
+        shared_spectra = shared_memory.SharedMemory(name=spectra_shared_name)
+        spectra = np.ndarray(spectra_shape, dtype=spec_dtype, buffer=shared_spectra.buf)
+        shared_mask = shared_memory.SharedMemory(name=mask_shared_name)
+        rfi_mask = np.ndarray(spectra_shape, dtype=bool, buffer=shared_mask.buf)
+
+        # Replace zeros with NaN (zeros indicate masked regions after zero-filling)
+        spectra_work = spectra.copy()
+        spectra_work[spectra_work == 0] = np.nan
+
+        # Trim to multiple of time_bin
+        nchan, ntime = spectra_shape
+        ntime_trimmed = (ntime // time_bin) * time_bin
+        spectra_trimmed = spectra_work[:, :ntime_trimmed]
+
+        print(f"DEBUG: MedianFilter - Binning {ntime} samples into {ntime_trimmed // time_bin} bins of {time_bin} samples")
+
+        # Reshape and average: (nchan, ntime_trimmed) -> (nchan, nbins, time_bin) -> (nchan, nbins)
+        spectra_binned = spectra_trimmed.reshape(nchan, -1, time_bin).mean(axis=-1)
+        print(f"DEBUG: MedianFilter - spectra_binned shape: {spectra_binned.shape}")
+
+        # Apply median filter along time axis for each channel
+        # Use mode='reflect' to handle edges
+        spectra_filtered = np.apply_along_axis(
+            lambda x: median_filter(x, size=self.median_window, mode='reflect'),
+            axis=1,
+            arr=spectra_binned
+        )
+
+        # Compute residual
+        residual = spectra_binned - spectra_filtered
+
+        # For each channel, compute MAD of residuals (excluding NaNs)
+        channel_mads = np.apply_along_axis(
+            lambda x: median_absolute_deviation(x[~np.isnan(x)])[1] if np.sum(~np.isnan(x)) > 0 else 0,
+            axis=1,
+            arr=residual
+        )
+
+        print(f"DEBUG: MedianFilter - channel_mads min/max/median: {np.min(channel_mads)}/{np.max(channel_mads)}/{np.median(channel_mads)}")
+
+        # Flag samples where |residual| > threshold * MAD for that channel
+        bad_mask_binned = np.abs(residual) > (self.threshold * channel_mads[:, np.newaxis])
+
+        # Expand binned mask back to full time resolution
+        # Each bin corresponds to time_bin samples in original data
+        bad_mask_full = np.repeat(bad_mask_binned, time_bin, axis=1)
+
+        # Pad if necessary to match original time dimension
+        if bad_mask_full.shape[1] < ntime:
+            pad_width = ((0, 0), (0, ntime - bad_mask_full.shape[1]))
+            bad_mask_full = np.pad(bad_mask_full, pad_width, mode='edge')
+
+        num_flagged = np.sum(bad_mask_full)
+        frac_flagged = num_flagged / bad_mask_full.size
+        print(f"DEBUG: MedianFilter - Flagged {num_flagged} samples ({frac_flagged*100:.2f}%)")
+
+        # Update the cleaner mask
+        self.cleaner_mask = bad_mask_full
+
+        # Also update the shared memory mask directly
+        print(f"DEBUG: MedianFilter - rfi_mask sum before: {rfi_mask.sum()}")
+        rfi_mask[bad_mask_full] = True
+        print(f"DEBUG: MedianFilter - rfi_mask sum after: {rfi_mask.sum()}")
+
+        self.cleaned = True
+
+        # Close shared memory handles
+        shared_spectra.close()
+        shared_mask.close()
+
+
 class PowerSpectrumCleaner(Cleaner):
     """
     This class accepts a spectra and detects periodic RFI with an amplitude outside the

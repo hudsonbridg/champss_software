@@ -16,6 +16,7 @@ rfi:
   dummy: False       # run a dummy filter that does nothing
 rfi_global:
   stddev: True       # run standard deviation channel cleaner on full dataset after filling
+  medianfilter: False  # run median filter cleaner on full dataset (flags residuals from median-filtered timestreams)
 beamform:
   nbits: 32
   nsub: 16384

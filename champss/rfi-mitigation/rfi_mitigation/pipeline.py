@@ -346,6 +346,9 @@ class RFIGlobalPipeline:
         self.apply_stddev_filter = (
             masks_to_apply["stddev"] if "stddev" in keys else False
         )
+        self.apply_medianfilter = (
+            masks_to_apply["medianfilter"] if "medianfilter" in keys else False
+        )
 
         self.plot_diagnostics = make_plots
 
@@ -421,6 +424,43 @@ class RFIGlobalPipeline:
                 log.debug(
                     f"Corresponds to {1000 * stddev_time_per_chan} ms per channel"
                 )
+
+        if self.apply_medianfilter:
+            with rfi_processing_time.labels("median_filter_channel_global", "0").time():
+                medianfilter_start = time.time()
+                log.debug("Global Median Filter Channel clean START")
+                cleaner = cleaners.MedianFilterChannelCleaner(spectra_shape)
+                cleaner.clean(spectra_shared_name, mask_shared_name, spectra_shape, spec_dtype)
+
+                # Re-access mask after cleaner modifies it
+                shared_mask = shared_memory.SharedMemory(name=mask_shared_name)
+                rfi_mask = np.ndarray(spectra_shape, dtype=bool, buffer=shared_mask.buf)
+                before_masked_frac = rfi_mask.mean()
+
+                print(f"DEBUG: MedianFilter - Before combining - rfi_mask sum: {rfi_mask.sum()}")
+                print(f"DEBUG: MedianFilter - Cleaner mask sum: {cleaner.get_mask().sum()}")
+
+                rfi_mask[:], masked_frac = combine_cleaner_masks(
+                    np.array([rfi_mask, cleaner.get_mask()])
+                )
+
+                print(f"DEBUG: MedianFilter - After combining - rfi_mask sum: {rfi_mask.sum()}")
+
+                masked_frac = rfi_mask.mean()
+                unique_masked_frac = masked_frac - before_masked_frac
+                log.debug(f"unique masked frac = {unique_masked_frac:g}")
+                log.debug(f"total masked frac = {masked_frac:g}")
+                log.debug("Global Median Filter Channel clean END")
+                medianfilter_end = time.time()
+                medianfilter_runtime = medianfilter_end - medianfilter_start
+                medianfilter_time_per_chan = medianfilter_runtime / spectra_shape[0]
+                log.debug(
+                    f"Took {medianfilter_runtime} seconds to run global MedianFilterChannelCleaner"
+                )
+                log.debug(
+                    f"Corresponds to {1000 * medianfilter_time_per_chan} ms per channel"
+                )
+                shared_mask.close()
 
         log.info(f"final flagged fraction = {rfi_mask.mean():g}")
 

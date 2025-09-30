@@ -115,6 +115,7 @@ class SkyBeamFormer:
         ),
     )
     rfi_pipeline = attr.ib(init=False)
+    rfi_pipeline_postfill = attr.ib(init=False)
     max_mask_frac = attr.ib(default=1.0, validator=instance_of(float))
 
     @extn.validator
@@ -162,9 +163,12 @@ class SkyBeamFormer:
             assert v in [0, 1, 2, 3], "the active beams must be either 0, 1, 2 or 3"
 
     def __attrs_post_init__(self):
-        """Create RFIPipeline instance."""
+        """Create RFIPipeline instances."""
         if self.run_rfi_mitigation:
             self.rfi_pipeline = RFIPipeline(self.masking_dict, make_plots=False)
+            # Create second pipeline for post-fill cleaning with only stddev cleaner
+            postfill_masking_dict = {"stddev": True}
+            self.rfi_pipeline_postfill = RFIPipeline(postfill_masking_dict, make_plots=False)
 
     def form_skybeam(self, active_pointing, num_threads=1):
         """
@@ -367,6 +371,29 @@ class SkyBeamFormer:
                 nsub_slices,
             )
         log.info("Finished filling and normalization.")
+
+        # Second RFI pass: run StdDevChannelCleaner on filled data
+        if self.run_rfi_mitigation:
+            log.info("Starting post-fill RFI cleaning (StdDevChannelCleaner).")
+            log.info(
+                "Pre-postfill masking Fraction:"
+                f" {(rfi_mask.sum() / rfi_mask.size):.4f}"
+            )
+            pool.map(
+                partial(
+                    self.rfi_pipeline_postfill.clean,
+                    spectra_shared.name,
+                    mask_shared.name,
+                    spectra_shape,
+                    spec_dtype,
+                ),
+                raw_spec_slices,
+            )
+            log.info(
+                "Post-fill RFI cleaning finished. New masking Fraction:"
+                f" {(rfi_mask.sum() / rfi_mask.size):.4f}"
+            )
+
         pool.map(
             partial(
                 self.zero_replace_shared_spectra,

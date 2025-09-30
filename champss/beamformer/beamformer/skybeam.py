@@ -87,6 +87,10 @@ class SkyBeamFormer:
     masking_dict: dict
         The dictionary of the configuration for the RFI mitigation process. Default = {}
 
+    global_masking_dict: dict
+        The dictionary of the configuration for the global RFI mitigation process
+        (runs on full dataset after filling). Default = {}
+
     active_beams: List[int]
         The list of beam columns to be used for beamforming from 0 to 3. Default [0, 1, 2, 3]
     """
@@ -108,6 +112,7 @@ class SkyBeamFormer:
     min_data_frac = attr.ib(default=0.0, validator=instance_of(float))
     run_rfi_mitigation = attr.ib(default=True, validator=instance_of(bool))
     masking_dict = attr.ib(default={}, validator=instance_of(dict), type=dict)
+    global_masking_dict = attr.ib(default={}, validator=instance_of(dict), type=dict)
     active_beams = attr.ib(
         default=[0, 1, 2, 3],
         validator=deep_iterable(
@@ -167,8 +172,11 @@ class SkyBeamFormer:
         if self.run_rfi_mitigation:
             self.rfi_pipeline = RFIPipeline(self.masking_dict, make_plots=False)
             # Create global pipeline for post-fill cleaning on full dataset
-            global_masking_dict = {"stddev": True}
-            self.rfi_global_pipeline = RFIGlobalPipeline(global_masking_dict, make_plots=False)
+            # Only create if global_masking_dict is not empty
+            if self.global_masking_dict:
+                self.rfi_global_pipeline = RFIGlobalPipeline(self.global_masking_dict, make_plots=False)
+            else:
+                self.rfi_global_pipeline = None
 
     def form_skybeam(self, active_pointing, num_threads=1):
         """
@@ -372,9 +380,9 @@ class SkyBeamFormer:
             )
         log.info("Finished filling and normalization.")
 
-        # Global RFI pass: run StdDevChannelCleaner on full filled dataset
-        if self.run_rfi_mitigation:
-            log.info("Starting global RFI cleaning on full dataset (StdDevChannelCleaner).")
+        # Global RFI pass: run on full filled dataset if configured
+        if self.run_rfi_mitigation and self.rfi_global_pipeline is not None:
+            log.info("Starting global RFI cleaning on full dataset.")
             log.info(
                 "Pre-global-clean masking Fraction:"
                 f" {(rfi_mask.sum() / rfi_mask.size):.4f}"

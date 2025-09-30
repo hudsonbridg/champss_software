@@ -579,11 +579,8 @@ class StdDevChannelCleaner(Cleaner):
         ntime_trimmed = (ntime // time_bin) * time_bin
         spectra_trimmed = spectra_work[:, :ntime_trimmed]
 
-        print(f"DEBUG: Binning {ntime} samples into {ntime_trimmed // time_bin} bins of {time_bin} samples")
-
         # Reshape and average: (nchan, ntime_trimmed) -> (nchan, nbins, time_bin) -> (nchan, nbins)
         spectra_binned = spectra_trimmed.reshape(nchan, -1, time_bin).mean(axis=-1)
-        print(f"DEBUG: spectra_binned shape: {spectra_binned.shape}")
 
         # Check the fraction of channels that are already heavily flagged
         channel_mask_fractions = rfi_mask.mean(axis=1)
@@ -610,8 +607,6 @@ class StdDevChannelCleaner(Cleaner):
         # Replace NaN stds with 0 for heavily-flagged channels
         channel_stds[np.isnan(channel_stds)] = 0
 
-        print(f"DEBUG: channel_stds min/max/median: {np.nanmin(channel_stds)}/{np.nanmax(channel_stds)}/{np.nanmedian(channel_stds)}")
-
         # Always compute statistics from only the cleaner channels (those with <50% flagged)
         # to avoid biased estimates when many channels are already heavily flagged
         clean_channel_stds = channel_stds[~heavily_flagged_channels]
@@ -632,9 +627,6 @@ class StdDevChannelCleaner(Cleaner):
 
         # Normalize std by its median (like in the working snippet)
         std_median = np.nanmedian(clean_channel_stds)
-        print(f"DEBUG: std_median = {std_median}")
-        print(f"DEBUG: clean_channel_stds min/max = {clean_channel_stds.min()}/{clean_channel_stds.max()}")
-        print(f"DEBUG: Number of zero stds: {np.sum(channel_stds == 0)}")
 
         if std_median == 0:
             log.warning("Median std is zero - skipping cleaner")
@@ -644,23 +636,10 @@ class StdDevChannelCleaner(Cleaner):
         normalized_channel_stds = channel_stds / std_median
         normalized_clean_stds = clean_channel_stds / std_median
 
-        print(f"DEBUG: normalized_channel_stds min/max = {normalized_channel_stds.min()}/{normalized_channel_stds.max()}")
-
-        # Write out channel stds for debugging
-        np.save('channel_stds_debug.npy', {
-            'channel_stds': channel_stds,
-            'normalized_channel_stds': normalized_channel_stds,
-            'clean_channel_stds': clean_channel_stds,
-            'heavily_flagged_channels': heavily_flagged_channels,
-            'channel_mask_fractions': channel_mask_fractions
-        })
-        print("DEBUG: Saved channel std data to channel_stds_debug.npy")
-
         # Use MAD for robust statistics on normalized std values
         # Compute MAD of (normalized_std - 1) to detect deviations from typical behavior
         std_deviations = normalized_clean_stds - 1.0
         std_mad = median_absolute_deviation(std_deviations)[1]  # Get just the MAD value
-        print(f"DEBUG: std_mad = {std_mad}")
         log.debug(f"Normalized channel std median: 1.0 (by design), MAD of deviations: {std_mad:.3f}")
 
         # Flag channels where deviation from 1.0 exceeds threshold
@@ -683,21 +662,11 @@ class StdDevChannelCleaner(Cleaner):
             f"based on normalized std deviation (bounds: [{lower_bound:.3f}, {upper_bound:.3f}])"
         )
 
-        if num_flagged > 0:
-            bad_chan_indices = np.where(bad_channels)[0]
-            print(f"DEBUG: Bad channel indices: {bad_chan_indices[:20]}...")  # Show first 20
-            print(f"DEBUG: Example normalized stds: {normalized_channel_stds[bad_chan_indices[:5]]}")
-        else:
-            print("DEBUG: No channels flagged by StdDev cleaner")
-
         # Update the cleaner mask - flag entire channels
         self.cleaner_mask[bad_channels, :] = True
-        print(f"DEBUG: Cleaner mask shape: {self.cleaner_mask.shape}, sum: {self.cleaner_mask.sum()}")
 
         # Also update the shared memory mask directly
-        print(f"DEBUG: rfi_mask sum before applying cleaner: {rfi_mask.sum()}")
         rfi_mask[bad_channels, :] = True
-        print(f"DEBUG: rfi_mask sum after applying cleaner: {rfi_mask.sum()}")
 
         self.cleaned = True
 
@@ -788,18 +757,15 @@ class MedianFilterChannelCleaner(Cleaner):
         ntime_trimmed = (ntime // time_bin) * time_bin
         spectra_trimmed = spectra_work[:, :ntime_trimmed]
 
-        print(f"DEBUG: MedianFilter - Binning {ntime} samples into {ntime_trimmed // time_bin} bins of {time_bin} samples")
-
         # Check which channels are already heavily flagged (>50% masked)
         channel_mask_fractions = rfi_mask.mean(axis=1)
         heavily_flagged_channels = channel_mask_fractions > 0.5
         num_heavily_flagged = heavily_flagged_channels.sum()
 
-        print(f"DEBUG: MedianFilter - {num_heavily_flagged} channels ({num_heavily_flagged/nchan*100:.1f}%) are heavily flagged, skipping them")
+        log.debug(f"{num_heavily_flagged} channels ({num_heavily_flagged/nchan*100:.1f}%) are heavily flagged, skipping them")
 
         # Reshape and average: (nchan, ntime_trimmed) -> (nchan, nbins, time_bin) -> (nchan, nbins)
         spectra_binned = spectra_trimmed.reshape(nchan, -1, time_bin).mean(axis=-1)
-        print(f"DEBUG: MedianFilter - spectra_binned shape: {spectra_binned.shape}")
 
         # Apply median filter along time axis for each channel
         # Use mode='reflect' to handle edges
@@ -818,9 +784,6 @@ class MedianFilterChannelCleaner(Cleaner):
             axis=1,
             arr=residual
         )
-
-        print(f"DEBUG: MedianFilter - channel_mads min/max/median: {np.nanmin(channel_mads)}/{np.nanmax(channel_mads)}/{np.nanmedian(channel_mads)}")
-        print(f"DEBUG: MedianFilter - number of NaN/zero MADs: {np.sum(np.isnan(channel_mads))}/{np.sum(channel_mads == 0)}")
 
         # For heavily-flagged channels or channels with NaN/zero MAD, don't flag anything
         channel_mads[heavily_flagged_channels] = np.inf
@@ -841,15 +804,13 @@ class MedianFilterChannelCleaner(Cleaner):
 
         num_flagged = np.sum(bad_mask_full)
         frac_flagged = num_flagged / bad_mask_full.size
-        print(f"DEBUG: MedianFilter - Flagged {num_flagged} samples ({frac_flagged*100:.2f}%)")
+        log.info(f"Flagged {num_flagged} samples ({frac_flagged*100:.2f}%) based on median filter residuals")
 
         # Update the cleaner mask
         self.cleaner_mask = bad_mask_full
 
         # Also update the shared memory mask directly
-        print(f"DEBUG: MedianFilter - rfi_mask sum before: {rfi_mask.sum()}")
         rfi_mask[bad_mask_full] = True
-        print(f"DEBUG: MedianFilter - rfi_mask sum after: {rfi_mask.sum()}")
 
         self.cleaned = True
 

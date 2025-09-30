@@ -443,36 +443,15 @@ class SkyBeamFormer:
 
         # Optional timestream normalization
         if self.normalize_timestream:
-            from scipy.ndimage import gaussian_filter1d
+            from scipy.ndimage import gaussian_filter
 
             log.info("Normalizing by frequency-averaged, gaussian-filtered timestream")
 
-            # Create a copy to avoid modifying masked data
-            spectra_work = np.copy(spectra)
-            spectra_work[rfi_mask] = np.nan
-
-            # Compute frequency-averaged timestream (ignoring NaNs/masked data)
-            with np.errstate(invalid='ignore'):
-                timestream = np.nanmean(spectra_work, axis=0)
-
-            # Handle time samples where all channels are masked (NaN)
-            # Interpolate or set to 1.0 to avoid corrupting the data
-            nan_mask = np.isnan(timestream)
-            if np.any(nan_mask):
-                # Set NaN values to the median of non-NaN values
-                median_val = np.nanmedian(timestream)
-                if np.isnan(median_val):
-                    # All samples are NaN, set to 1.0 to avoid division issues
-                    timestream[:] = 1.0
-                else:
-                    timestream[nan_mask] = median_val
+            # Compute frequency-averaged timestream
+            timestream = np.mean(spectra, axis=0)
 
             # Apply gaussian filter
-            timestream_filtered = gaussian_filter1d(timestream, sigma=self.normalize_gaussian_width, mode='nearest')
-
-            # Avoid division by zero or very small values
-            timestream_filtered[timestream_filtered == 0] = 1.0
-            timestream_filtered[np.abs(timestream_filtered) < 1e-10] = 1.0
+            timestream_filtered = gaussian_filter(timestream, sigma=self.normalize_gaussian_width)
 
             # Normalize each channel by the filtered timestream
             spectra[:] = spectra / timestream_filtered[np.newaxis, :]

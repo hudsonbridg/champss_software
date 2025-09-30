@@ -434,13 +434,27 @@ class SkyBeamFormer:
             spectra_work[rfi_mask] = np.nan
 
             # Compute frequency-averaged timestream (ignoring NaNs/masked data)
-            timestream = np.nanmean(spectra_work, axis=0)
+            with np.errstate(invalid='ignore'):
+                timestream = np.nanmean(spectra_work, axis=0)
+
+            # Handle time samples where all channels are masked (NaN)
+            # Interpolate or set to 1.0 to avoid corrupting the data
+            nan_mask = np.isnan(timestream)
+            if np.any(nan_mask):
+                # Set NaN values to the median of non-NaN values
+                median_val = np.nanmedian(timestream)
+                if np.isnan(median_val):
+                    # All samples are NaN, set to 1.0 to avoid division issues
+                    timestream[:] = 1.0
+                else:
+                    timestream[nan_mask] = median_val
 
             # Apply gaussian filter
             timestream_filtered = gaussian_filter1d(timestream, sigma=self.normalize_gaussian_width, mode='nearest')
 
-            # Avoid division by zero
+            # Avoid division by zero or very small values
             timestream_filtered[timestream_filtered == 0] = 1.0
+            timestream_filtered[np.abs(timestream_filtered) < 1e-10] = 1.0
 
             # Normalize each channel by the filtered timestream
             spectra[:] = spectra / timestream_filtered[np.newaxis, :]

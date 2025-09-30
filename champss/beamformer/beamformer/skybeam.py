@@ -477,9 +477,6 @@ class SkyBeamFormer:
             # Normalize each channel by the filtered timestream
             spectra[:] = spectra / timestream_filtered[np.newaxis, :]
 
-            # Re-zero the masked regions
-            spectra[rfi_mask] = 0
-
             log.info("Timestream normalization complete")
 
         completely_masked_channels = rfi_mask.min(axis=1).sum()

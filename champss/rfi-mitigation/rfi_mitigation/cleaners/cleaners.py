@@ -565,6 +565,17 @@ class StdDevChannelCleaner(Cleaner):
         # Use masked array to ignore already-flagged data
         masked_spectra = np.ma.array(spectra, mask=rfi_mask)
 
+        # Check the fraction of channels that are already heavily flagged
+        channel_mask_fractions = rfi_mask.mean(axis=1)
+        heavily_flagged_channels = channel_mask_fractions > 0.5
+        num_heavily_flagged = heavily_flagged_channels.sum()
+        frac_heavily_flagged = num_heavily_flagged / self.nchan
+
+        log.debug(
+            f"{num_heavily_flagged} channels ({frac_heavily_flagged*100:.1f}%) "
+            f"already have >50% of samples flagged"
+        )
+
         # Compute time-averaged mean for each channel
         channel_means = np.ma.mean(masked_spectra, axis=1, keepdims=True)
 
@@ -580,9 +591,23 @@ class StdDevChannelCleaner(Cleaner):
         # Handle case where all data in a channel is masked
         channel_stds = channel_stds.filled(0)
 
+        # Always compute statistics from only the cleaner channels (those with <50% flagged)
+        # to avoid biased estimates when many channels are already heavily flagged
+        clean_channel_stds = channel_stds[~heavily_flagged_channels]
+
+        if len(clean_channel_stds) == 0:
+            log.error("No clean channels available for statistics - skipping cleaner")
+            self.cleaned = True
+            return
+
+        log.debug(
+            f"Computing statistics from {len(clean_channel_stds)} channels "
+            f"with <50% samples flagged"
+        )
+
         if self.use_mad:
             # Use MAD for robust statistics
-            std_median, std_mad = median_absolute_deviation(channel_stds)
+            std_median, std_mad = median_absolute_deviation(clean_channel_stds)
             log.debug(f"Normalized channel std median: {std_median:.3f}, MAD: {std_mad:.3f}")
 
             # Flag channels outside threshold
@@ -590,8 +615,8 @@ class StdDevChannelCleaner(Cleaner):
             lower_bound = std_median - self.threshold * std_mad
         else:
             # Use standard statistics
-            std_median = np.median(channel_stds)
-            std_std = np.std(channel_stds)
+            std_median = np.median(clean_channel_stds)
+            std_std = np.std(clean_channel_stds)
             log.debug(f"Normalized channel std median: {std_median:.3f}, std: {std_std:.3f}")
 
             upper_bound = std_median + self.threshold * std_std

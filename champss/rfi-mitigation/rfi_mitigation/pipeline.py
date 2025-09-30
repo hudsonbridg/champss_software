@@ -66,6 +66,9 @@ class RFIPipeline:
             masks_to_apply["powspec"] if "powspec" in keys else False
         )
         self.apply_dummy_filter = masks_to_apply["dummy"] if "dummy" in keys else False
+        self.apply_stddev_filter = (
+            masks_to_apply["stddev"] if "stddev" in keys else False
+        )
 
         self.plot_diagnostics = make_plots
 
@@ -265,6 +268,31 @@ class RFIPipeline:
                 log.debug(f"Took {powspec_runtime} seconds to run PowerSpectrumCleaner")
                 log.debug(
                     f"Corresponds to {1000 * powspec_time_per_chan} ms per channel"
+                )
+
+        if self.apply_stddev_filter:
+            with rfi_processing_time.labels("stddev_channel", "0").time():
+                stddev_start = time.time()
+                log.debug("StdDev Channel clean START")
+                cleaner = cleaners.StdDevChannelCleaner(spectra.shape)
+                cleaner.clean(spectra, rfi_mask)
+                before_masked_frac = rfi_mask.mean()
+
+                rfi_mask[:], masked_frac = combine_cleaner_masks(
+                    np.array([rfi_mask, cleaner.get_mask()])
+                )
+
+                masked_frac = rfi_mask.mean()
+                unique_masked_frac = masked_frac - before_masked_frac
+                log.debug(f"unique masked frac = {unique_masked_frac:g}")
+                log.debug(f"total masked frac = {masked_frac:g}")
+                log.debug("StdDev Channel clean END")
+                stddev_end = time.time()
+                stddev_runtime = stddev_end - stddev_start
+                stddev_time_per_chan = stddev_runtime / spectra_shape[0]
+                log.debug(f"Took {stddev_runtime} seconds to run StdDevChannelCleaner")
+                log.debug(
+                    f"Corresponds to {1000 * stddev_time_per_chan} ms per channel"
                 )
 
         # update cleaned flag and append to the list of output instances

@@ -503,6 +503,120 @@ class SpectralKurtosisCleaner(Cleaner):
             self.cleaner_mask[:, start_idx:end_idx] = sk_mask[:, np.newaxis]
 
 
+class StdDevChannelCleaner(Cleaner):
+    """
+    This class flags channels based on anomalous standard deviation values computed
+    across the full beamformed pointing. This helps identify RFI that varies on
+    longer timescales than the typical 1-second blocks.
+
+    The cleaner first normalizes each channel by its time-averaged mean to remove
+    bandpass structure, then computes the standard deviation across time. Channels
+    with anomalously high or low normalized standard deviations are flagged.
+    """
+
+    def __init__(
+        self,
+        spectra_shape,
+        threshold: float = 5.0,
+        use_mad: bool = True,
+    ):
+        """
+        Initialize the StdDevChannelCleaner.
+
+        Parameters
+        ----------
+        spectra_shape : tuple
+            Shape of the spectra (nchan, ntime)
+        threshold : float
+            Number of sigma (or MAD units) beyond which channels are flagged.
+            Default: 5.0
+        use_mad : bool
+            If True, use median absolute deviation instead of standard deviation
+            for robust statistics. Default: True
+        """
+        super().__init__(spectra_shape)
+        self.threshold = threshold
+        self.use_mad = use_mad
+
+    def summary(self):
+        return dict(
+            nchan=self.nchan,
+            ntime=self.ntime,
+            nsamp=self.nsamp,
+            threshold=self.threshold,
+            use_mad=self.use_mad,
+            nmasked=self.cleaner_mask.sum(),
+            cleaned=self.cleaned,
+        )
+
+    def clean(self, spectra, rfi_mask):
+        """
+        Flag channels based on anomalous standard deviation across full pointing.
+
+        Parameters
+        ----------
+        spectra : np.ndarray
+            The intensity data (nchan, ntime)
+        rfi_mask : np.ndarray
+            Current RFI mask (nchan, ntime)
+        """
+        log.info("Running Standard Deviation Channel cleaner")
+
+        # Use masked array to ignore already-flagged data
+        masked_spectra = np.ma.array(spectra, mask=rfi_mask)
+
+        # Compute time-averaged mean for each channel
+        channel_means = np.ma.mean(masked_spectra, axis=1, keepdims=True)
+
+        # Normalize by dividing by the mean to remove bandpass structure
+        # Avoid division by zero
+        channel_means_filled = channel_means.filled(1.0)
+        channel_means_filled[channel_means_filled == 0] = 1.0
+        normalized_spectra = masked_spectra / channel_means_filled
+
+        # Compute standard deviation for each normalized channel across all time
+        channel_stds = np.ma.std(normalized_spectra, axis=1)
+
+        # Handle case where all data in a channel is masked
+        channel_stds = channel_stds.filled(0)
+
+        if self.use_mad:
+            # Use MAD for robust statistics
+            std_median, std_mad = median_absolute_deviation(channel_stds)
+            log.debug(f"Normalized channel std median: {std_median:.3f}, MAD: {std_mad:.3f}")
+
+            # Flag channels outside threshold
+            upper_bound = std_median + self.threshold * std_mad
+            lower_bound = std_median - self.threshold * std_mad
+        else:
+            # Use standard statistics
+            std_median = np.median(channel_stds)
+            std_std = np.std(channel_stds)
+            log.debug(f"Normalized channel std median: {std_median:.3f}, std: {std_std:.3f}")
+
+            upper_bound = std_median + self.threshold * std_std
+            lower_bound = std_median - self.threshold * std_std
+
+        # Flag entire channels that fall outside bounds
+        bad_channels = np.logical_or(
+            channel_stds > upper_bound,
+            channel_stds < lower_bound
+        )
+
+        # Also flag channels with zero std (non-physical)
+        bad_channels = np.logical_or(bad_channels, channel_stds == 0)
+
+        num_flagged = np.sum(bad_channels)
+        log.info(
+            f"Flagged {num_flagged} channels ({num_flagged/self.nchan*100:.1f}%) "
+            f"based on normalized std deviation (bounds: [{lower_bound:.3f}, {upper_bound:.3f}])"
+        )
+
+        # Update the cleaner mask - flag entire channels
+        self.cleaner_mask[bad_channels, :] = True
+        self.cleaned = True
+
+
 class PowerSpectrumCleaner(Cleaner):
     """
     This class accepts a spectra and detects periodic RFI with an amplitude outside the

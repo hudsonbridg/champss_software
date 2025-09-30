@@ -13,6 +13,7 @@ rfi:
   mad: False         # do NOT run median absolute deviation outlier filter
   sk: True           # run spectral kurtosis filter
   powspec: False     # run power spectrum cleaner
+  stddev: False      # run standard deviation channel cleaner (flags bad channels across full pointing)
   dummy: False       # run a dummy filter that does nothing
 beamform:
   nbits: 32

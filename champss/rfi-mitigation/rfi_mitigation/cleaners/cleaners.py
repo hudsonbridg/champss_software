@@ -518,7 +518,6 @@ class StdDevChannelCleaner(Cleaner):
         self,
         spectra_shape,
         threshold: float = 5.0,
-        use_mad: bool = True,
     ):
         """
         Initialize the StdDevChannelCleaner.
@@ -528,15 +527,11 @@ class StdDevChannelCleaner(Cleaner):
         spectra_shape : tuple
             Shape of the spectra (nchan, ntime)
         threshold : float
-            Number of sigma (or MAD units) beyond which channels are flagged.
+            Number of MAD units beyond which channels are flagged.
             Default: 5.0
-        use_mad : bool
-            If True, use median absolute deviation instead of standard deviation
-            for robust statistics. Default: True
         """
         super().__init__(spectra_shape)
         self.threshold = threshold
-        self.use_mad = use_mad
 
     def summary(self):
         return dict(
@@ -544,7 +539,6 @@ class StdDevChannelCleaner(Cleaner):
             ntime=self.ntime,
             nsamp=self.nsamp,
             threshold=self.threshold,
-            use_mad=self.use_mad,
             nmasked=self.cleaner_mask.sum(),
             cleaned=self.cleaned,
         )
@@ -605,22 +599,13 @@ class StdDevChannelCleaner(Cleaner):
             f"with <50% samples flagged"
         )
 
-        if self.use_mad:
-            # Use MAD for robust statistics
-            std_median, std_mad = median_absolute_deviation(clean_channel_stds)
-            log.debug(f"Normalized channel std median: {std_median:.3f}, MAD: {std_mad:.3f}")
+        # Use MAD for robust statistics
+        std_median, std_mad = median_absolute_deviation(clean_channel_stds)
+        log.debug(f"Normalized channel std median: {std_median:.3f}, MAD: {std_mad:.3f}")
 
-            # Flag channels outside threshold
-            upper_bound = std_median + self.threshold * std_mad
-            lower_bound = std_median - self.threshold * std_mad
-        else:
-            # Use standard statistics
-            std_median = np.median(clean_channel_stds)
-            std_std = np.std(clean_channel_stds)
-            log.debug(f"Normalized channel std median: {std_median:.3f}, std: {std_std:.3f}")
-
-            upper_bound = std_median + self.threshold * std_std
-            lower_bound = std_median - self.threshold * std_std
+        # Flag channels outside threshold
+        upper_bound = std_median + self.threshold * std_mad
+        lower_bound = std_median - self.threshold * std_mad
 
         # Flag entire channels that fall outside bounds
         bad_channels = np.logical_or(

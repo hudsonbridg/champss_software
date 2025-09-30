@@ -556,8 +556,14 @@ class StdDevChannelCleaner(Cleaner):
         """
         log.info("Running Standard Deviation Channel cleaner")
 
-        # Use masked array to ignore already-flagged data
-        masked_spectra = np.ma.array(spectra, mask=rfi_mask)
+        # Replace zeros with small value to avoid issues with normalization
+        # (zeros typically indicate masked/filled regions after zero_replace)
+        spectra_work = np.copy(spectra)
+        spectra_work[spectra_work == 0] = np.nan
+
+        # Use masked array to ignore already-flagged data and NaN values
+        combined_mask = np.logical_or(rfi_mask, np.isnan(spectra_work))
+        masked_spectra = np.ma.array(spectra_work, mask=combined_mask)
 
         # Check the fraction of channels that are already heavily flagged
         channel_mask_fractions = rfi_mask.mean(axis=1)
@@ -635,8 +641,16 @@ class StdDevChannelCleaner(Cleaner):
             f"based on normalized std deviation (bounds: [{lower_bound:.3f}, {upper_bound:.3f}])"
         )
 
+        if num_flagged > 0:
+            bad_chan_indices = np.where(bad_channels)[0]
+            print(f"DEBUG: Bad channel indices: {bad_chan_indices[:20]}...")  # Show first 20
+            print(f"DEBUG: Example normalized stds: {normalized_channel_stds[bad_chan_indices[:5]]}")
+        else:
+            print("DEBUG: No channels flagged by StdDev cleaner")
+
         # Update the cleaner mask - flag entire channels
         self.cleaner_mask[bad_channels, :] = True
+        print(f"DEBUG: Cleaner mask shape: {self.cleaner_mask.shape}, sum: {self.cleaner_mask.sum()}")
         self.cleaned = True
 
 

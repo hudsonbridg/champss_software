@@ -394,9 +394,14 @@ class RFIGlobalPipeline:
                 cleaner.clean(spectra, rfi_mask)
                 before_masked_frac = rfi_mask.mean()
 
+                print(f"DEBUG: Before combining - rfi_mask sum: {rfi_mask.sum()}")
+                print(f"DEBUG: Cleaner mask sum: {cleaner.get_mask().sum()}")
+
                 rfi_mask[:], masked_frac = combine_cleaner_masks(
                     np.array([rfi_mask, cleaner.get_mask()])
                 )
+
+                print(f"DEBUG: After combining - rfi_mask sum: {rfi_mask.sum()}")
 
                 masked_frac = rfi_mask.mean()
                 unique_masked_frac = masked_frac - before_masked_frac

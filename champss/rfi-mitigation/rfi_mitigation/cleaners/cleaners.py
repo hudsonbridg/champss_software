@@ -790,6 +790,13 @@ class MedianFilterChannelCleaner(Cleaner):
 
         print(f"DEBUG: MedianFilter - Binning {ntime} samples into {ntime_trimmed // time_bin} bins of {time_bin} samples")
 
+        # Check which channels are already heavily flagged (>50% masked)
+        channel_mask_fractions = rfi_mask.mean(axis=1)
+        heavily_flagged_channels = channel_mask_fractions > 0.5
+        num_heavily_flagged = heavily_flagged_channels.sum()
+
+        print(f"DEBUG: MedianFilter - {num_heavily_flagged} channels ({num_heavily_flagged/nchan*100:.1f}%) are heavily flagged, skipping them")
+
         # Reshape and average: (nchan, ntime_trimmed) -> (nchan, nbins, time_bin) -> (nchan, nbins)
         spectra_binned = spectra_trimmed.reshape(nchan, -1, time_bin).mean(axis=-1)
         print(f"DEBUG: MedianFilter - spectra_binned shape: {spectra_binned.shape}")
@@ -807,12 +814,18 @@ class MedianFilterChannelCleaner(Cleaner):
 
         # For each channel, compute MAD of residuals (excluding NaNs)
         channel_mads = np.apply_along_axis(
-            lambda x: median_absolute_deviation(x[~np.isnan(x)])[1] if np.sum(~np.isnan(x)) > 0 else 0,
+            lambda x: median_absolute_deviation(x[~np.isnan(x)])[1] if np.sum(~np.isnan(x)) > 0 else np.nan,
             axis=1,
             arr=residual
         )
 
-        print(f"DEBUG: MedianFilter - channel_mads min/max/median: {np.min(channel_mads)}/{np.max(channel_mads)}/{np.median(channel_mads)}")
+        print(f"DEBUG: MedianFilter - channel_mads min/max/median: {np.nanmin(channel_mads)}/{np.nanmax(channel_mads)}/{np.nanmedian(channel_mads)}")
+        print(f"DEBUG: MedianFilter - number of NaN/zero MADs: {np.sum(np.isnan(channel_mads))}/{np.sum(channel_mads == 0)}")
+
+        # For heavily-flagged channels or channels with NaN/zero MAD, don't flag anything
+        channel_mads[heavily_flagged_channels] = np.inf
+        channel_mads[np.isnan(channel_mads)] = np.inf
+        channel_mads[channel_mads == 0] = np.inf
 
         # Flag samples where |residual| > threshold * MAD for that channel
         bad_mask_binned = np.abs(residual) > (self.threshold * channel_mads[:, np.newaxis])

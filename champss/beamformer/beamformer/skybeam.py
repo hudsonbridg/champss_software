@@ -380,9 +380,22 @@ class SkyBeamFormer:
             )
         log.info("Finished filling and normalization.")
 
-        # Global RFI pass: run on full filled dataset if configured
+        pool.map(
+            partial(
+                self.zero_replace_shared_spectra,
+                spectra_shared.name,
+                mask_shared.name,
+                spectra_shape,
+                spec_dtype,
+                flatten_bandpass=self.flatten_bandpass,
+            ),
+            nsub_slices,
+        )
+
+        # Global RFI pass: run on full dataset after zero replacement
+        # This allows cleaner statistics since masked regions are now filled
         if self.run_rfi_mitigation and self.rfi_global_pipeline is not None:
-            log.info("Starting global RFI cleaning on full dataset.")
+            log.info("Starting global RFI cleaning on zero-filled dataset.")
             log.info(
                 "Pre-global-clean masking Fraction:"
                 f" {(rfi_mask.sum() / rfi_mask.size):.4f}"
@@ -397,18 +410,6 @@ class SkyBeamFormer:
                 "Global RFI cleaning finished. New masking Fraction:"
                 f" {(rfi_mask.sum() / rfi_mask.size):.4f}"
             )
-
-        pool.map(
-            partial(
-                self.zero_replace_shared_spectra,
-                spectra_shared.name,
-                mask_shared.name,
-                spectra_shape,
-                spec_dtype,
-                flatten_bandpass=self.flatten_bandpass,
-            ),
-            nsub_slices,
-        )
         completely_masked_channels = rfi_mask.min(axis=1).sum()
         log.info(
             "Fraction of completely masked channels:"

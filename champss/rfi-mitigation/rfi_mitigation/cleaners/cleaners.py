@@ -599,18 +599,31 @@ class StdDevChannelCleaner(Cleaner):
             f"with <50% samples flagged"
         )
 
-        # Use MAD for robust statistics
-        std_median, std_mad = median_absolute_deviation(clean_channel_stds)
-        log.debug(f"Normalized channel std median: {std_median:.3f}, MAD: {std_mad:.3f}")
+        # Normalize std by its median (like in the working snippet)
+        std_median = np.median(clean_channel_stds)
+        if std_median == 0:
+            log.warning("Median std is zero - skipping cleaner")
+            self.cleaned = True
+            return
 
-        # Flag channels outside threshold
-        upper_bound = std_median + self.threshold * std_mad
-        lower_bound = std_median - self.threshold * std_mad
+        normalized_channel_stds = channel_stds / std_median
+        normalized_clean_stds = clean_channel_stds / std_median
+
+        # Use MAD for robust statistics on normalized std values
+        # Compute MAD of (normalized_std - 1) to detect deviations from typical behavior
+        std_deviations = normalized_clean_stds - 1.0
+        std_mad = median_absolute_deviation(std_deviations)[1]  # Get just the MAD value
+        log.debug(f"Normalized channel std median: 1.0 (by design), MAD of deviations: {std_mad:.3f}")
+
+        # Flag channels where deviation from 1.0 exceeds threshold
+        # This matches: (bpass-1) > thresh*mad from the snippet
+        upper_bound = 1.0 + self.threshold * std_mad
+        lower_bound = 1.0 - self.threshold * std_mad
 
         # Flag entire channels that fall outside bounds
         bad_channels = np.logical_or(
-            channel_stds > upper_bound,
-            channel_stds < lower_bound
+            normalized_channel_stds > upper_bound,
+            normalized_channel_stds < lower_bound
         )
 
         # Also flag channels with zero std (non-physical)

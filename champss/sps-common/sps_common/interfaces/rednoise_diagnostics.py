@@ -9,13 +9,19 @@ from sps_common.interfaces import PowerSpectra
 def get_from_stack(stack_path):
 
     ps_stack = PowerSpectra.read(stack_path)
-    medians = ps_stack.rn_medians
-    scales = ps_stack.rn_scales
-    scales = scales.astype('int')
-    DMs = ps_stack.dms[ps_stack.rn_dm_indices[0].astype(int)]
-    freq_labels = ps_stack.freq_labels
+    
+    try:
+        medians = ps_stack.rn_medians
+        scales = ps_stack.rn_scales
+        scales = scales.astype('int')
+        DMs = ps_stack.dms[ps_stack.rn_dm_indices[0].astype(int)]
+        freq_labels = ps_stack.freq_labels
+        return freq_labels, DMs, medians, scales
+    
+    except:
+        print("This power spectrum does not have saved rednoise information. Please rerun power spectrum creation with saving enabled.")
+        return
 
-    return freq_labels, DMs, medians, scales
 
 def freq_to_period(x):
     # Avoid division by zero
@@ -36,8 +42,7 @@ def plot_medians(freq_labels, DMs, medians, scales, title = 'Rednoise Medians'):
         print(f'day: {day + 1}')
         day_medians = medians[day]
         day_scales = scales[day]
-        
-        if len(day_scales).shape == 2:
+        if len(day_scales.shape) == 2:
             freq_idx = np.cumsum(day_scales[0]) #only need one... people keep changing the shape of this :/
         else:
             freq_idx = np.cumsum(day_scales)

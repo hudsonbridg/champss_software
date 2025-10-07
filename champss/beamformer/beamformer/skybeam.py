@@ -328,6 +328,17 @@ class SkyBeamFormer:
             log.info(f"Subtracting incoherent beam (offset by {time_offset_samples} samples)")
             spectra[:, :] -= incoh_spectra[:, time_offset_samples:time_offset_samples + spectra_shape[1]]
 
+            # Handle any invalid values created by subtraction
+            # Replace NaN, Inf, and negative values with 0 and mark in RFI mask
+            invalid_mask = ~np.isfinite(spectra) | (spectra < 0)
+            if np.any(invalid_mask):
+                num_invalid = invalid_mask.sum()
+                frac_invalid = num_invalid / spectra.size
+                log.warning(f"Incoherent beam subtraction created {num_invalid} invalid values "
+                           f"({frac_invalid:.4f} of data). Masking these.")
+                spectra[invalid_mask] = 0
+                rfi_mask[invalid_mask] = True
+
         # For now separate the spectrum that each thread gets one part
         # Splitting it too small might increase memory usage
         # Can set minimal length here

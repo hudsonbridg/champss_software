@@ -130,6 +130,7 @@ class SkyBeamFormer:
     rfi_pipeline = attr.ib(init=False)
     rfi_global_pipeline = attr.ib(init=False)
     max_mask_frac = attr.ib(default=1.0, validator=instance_of(float))
+    subtract_incoh_beam = attr.ib(default=None)  # Path to incoherent beam .npz file
 
     @extn.validator
     def _validate_extension(self, attribute, value):
@@ -289,6 +290,44 @@ class SkyBeamFormer:
             for slice in raw_spec_slice_list
         ]
         log.info("Finished loading.")
+
+        # Subtract incoherent beam if specified
+        if self.subtract_incoh_beam is not None:
+            log.info(f"Subtracting incoherent beam from {self.subtract_incoh_beam}")
+            incoh_data = np.load(self.subtract_incoh_beam)
+            incoh_spectra = incoh_data['data']
+            incoh_unix_start = float(incoh_data['unix_start'])
+            incoh_unix_end = float(incoh_data['unix_end'])
+
+            # Calculate observation time range
+            obs_unix_end = utc_start + spectra_shape[1] * TSAMP
+
+            # Check if incoherent beam fully covers observation
+            if incoh_unix_start > utc_start or incoh_unix_end < obs_unix_end:
+                mask_shared.close()
+                mask_shared.unlink()
+                raise ValueError(
+                    f"Incoherent beam does not fully cover observation time range. "
+                    f"Observation: {utc_start} to {obs_unix_end}, "
+                    f"Incoherent beam: {incoh_unix_start} to {incoh_unix_end}"
+                )
+
+            # Check channel count matches
+            if incoh_spectra.shape[0] != spectra_shape[0]:
+                mask_shared.close()
+                mask_shared.unlink()
+                raise ValueError(
+                    f"Channel mismatch: incoherent beam has {incoh_spectra.shape[0]} channels, "
+                    f"spectra has {spectra_shape[0]} channels"
+                )
+
+            # Calculate time offset between incoherent beam and current observation
+            time_offset_samples = round((utc_start - incoh_unix_start) / TSAMP)
+
+            # Subtract incoherent beam
+            log.info(f"Subtracting incoherent beam (offset by {time_offset_samples} samples)")
+            spectra[:, :] -= incoh_spectra[:, time_offset_samples:time_offset_samples + spectra_shape[1]]
+
         # For now separate the spectrum that each thread gets one part
         # Splitting it too small might increase memory usage
         # Can set minimal length here

@@ -31,6 +31,7 @@ beamform:
   normalize_timestream: False
   normalize_gaussian_width: 128
   max_mask_frac: 0.9
+  subtract_incoh_beam: null  # Path to incoherent beam .npz file, or null to disable
 dedisp:
   numdms: 40
   maxdm: 1700

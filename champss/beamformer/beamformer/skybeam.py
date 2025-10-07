@@ -181,8 +181,8 @@ class SkyBeamFormer:
         if self.run_rfi_mitigation:
             self.rfi_pipeline = RFIPipeline(self.masking_dict, make_plots=False)
             # Create global pipeline for post-fill cleaning on full dataset
-            # Only create if global_masking_dict is not empty
-            if self.global_masking_dict:
+            # Only create if global_masking_dict has any True values
+            if self.global_masking_dict and any(self.global_masking_dict.values()):
                 self.rfi_global_pipeline = RFIGlobalPipeline(self.global_masking_dict, make_plots=False)
             else:
                 self.rfi_global_pipeline = None

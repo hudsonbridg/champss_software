@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Fast Folding Algorithm (FFA) search for CHIME SPS"
 authors = ["CHIME SPS <chime_spawg@physics.mcgill.ca>"]
 license = "GPLv3"
+packages = [
+    { include = "FFA" },
+]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"

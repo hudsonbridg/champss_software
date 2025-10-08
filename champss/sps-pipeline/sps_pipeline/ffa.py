@@ -1,25 +1,19 @@
 """FFA (Fast Folding Algorithm) search module for the SPS pipeline."""
 
 import logging
-import os
-import sys
 import datetime
 import numpy as np
 from omegaconf import OmegaConf
 
-# Add FFA directory to path to import FFA modules
-ffa_path = os.path.join(os.path.dirname(__file__), "../../FFA")
-if ffa_path not in sys.path:
-    sys.path.insert(0, ffa_path)
-
-from FFA_search import (
+from FFA import (
     periodogram_form,
     periodogram_form_dm_0,
     gaussian_model,
+    SinglePointingCandidate_FFA,
+    SearchAlgorithm_FFA,
+    Clusterer_FFA,
+    Cluster_FFA,
 )
-from single_pointing_FFA import SinglePointingCandidate_FFA, SearchAlgorithm_FFA
-from clustering_FFA import Clusterer_FFA
-from interfaces_FFA import Cluster_FFA
 import riptide
 from scipy.optimize import curve_fit
 from sps_common.constants import TSAMP

@@ -598,17 +598,13 @@ def main(
                     f" {date:%Y-%m-%d}"
                 )
                 ffa_processor = ffa.initialise(config, num_threads)
-                ffa_detections, ffa_candidates = ffa.run(
+                ffa.run(
                     active_pointing,
                     dedisp_ts,
                     ffa_processor,
                     basepath,
                     date,
                 )
-                if ffa_candidates:
-                    log.info(f"FFA found {len(ffa_candidates)} candidates")
-                else:
-                    log.info("FFA found no candidates")
                 # Note: We don't delete dedisp_ts here as PS might need it
 
             if "ps" in components:

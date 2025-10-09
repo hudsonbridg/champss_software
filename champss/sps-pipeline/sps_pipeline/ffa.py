@@ -6,15 +6,7 @@ import os
 import numpy as np
 from omegaconf import OmegaConf
 
-from FFA import (
-    periodogram_form,
-    periodogram_form_dm_0,
-    gaussian_model,
-    SinglePointingCandidate_FFA,
-    SearchAlgorithm_FFA,
-    Clusterer_FFA,
-    Cluster_FFA,
-)
+from FFA.FFA_search import FFA_search
 import riptide
 from scipy.optimize import curve_fit
 from sps_common.constants import TSAMP
@@ -95,6 +87,7 @@ class FFAProcessor:
     def run_ffa_search_on_dedisp(
         self,
         dedisp_ts,
+        obs_id,
         ra,
         dec,
         date,
@@ -102,12 +95,14 @@ class FFAProcessor:
         birdies=None,
     ):
         """
-        Run FFA search on dedispersed time series.
+        Run FFA search on dedispersed time series using the full FFA_search implementation.
 
         Parameters
         ----------
         dedisp_ts : DedispersedTimeSeries
             Dedispersed time series object
+        obs_id : str
+            Observation ID
         ra : float
             Right ascension in degrees
         dec : float
@@ -119,214 +114,40 @@ class FFAProcessor:
         birdies : list, optional
             List of known birdie periods to filter
 
-        Returns
-        -------
-        ffa_detections : list
-            List of raw FFA detections
-        ffa_candidates : list
-            List of clustered FFA candidates
+        Notes
+        -----
+        The FFA_search function writes outputs directly to disk
         """
         if not self.run_ffa_search:
             log.info("FFA search is disabled")
-            return None, None
+            return
 
         log.info(f"Starting FFA search on RA={ra:.2f}, DEC={dec:.2f}, Date={date}")
 
-        # Get DM range
-        dm_max = self.dm_max if self.dm_max is not None else dedisp_ts.dms.max()
-
-        # Downsample DM trials
-        dm_indices = np.arange(0, len(dedisp_ts.dms), self.dm_downsample)
-        dm_trials = dedisp_ts.dms[dm_indices]
-
-        # Filter DM range
-        dm_mask = (dm_trials >= self.dm_min) & (dm_trials <= dm_max)
-        dm_trials = dm_trials[dm_mask]
-        dm_indices = dm_indices[dm_mask]
-
-        log.info(f"Searching {len(dm_trials)} DM trials from {dm_trials[0]:.1f} to {dm_trials[-1]:.1f}")
-
-        # Get RFI peaks from DM=0
-        log.debug("Finding RFI peaks at DM=0")
-        if birdies is None:
-            try:
-                rfi_peaks = periodogram_form_dm_0(
-                    dedisp_ts.dedisp_ts[0],
-                    period_min=2.0,
-                    period_max=20.0,
-                    min_rfi_sigma=self.min_rfi_sigma,
-                )
-                birdies = [peak.period for peak in rfi_peaks]
-                log.info(f"Found {len(birdies)} RFI birdies at DM=0")
-            except Exception as e:
-                log.warning(f"Could not determine RFI peaks: {e}")
-                birdies = []
-
-        # Run FFA on each DM trial
-        all_detections = []
-
-        for idx, dm in zip(dm_indices, dm_trials):
-            try:
-                ts, pgram, peaks = periodogram_form(
-                    dedisp_ts.dedisp_ts[idx],
-                    dm=dm,
-                    birdies=birdies,
-                    min_detection_sigma=self.min_detection_sigma,
-                    min_rfi_sigma=self.min_rfi_sigma,
-                    birdie_tolerance=self.birdie_tolerance,
-                    period_min=2.0,
-                    period_max=20.0,
-                )
-
-                # Store detections
-                for peak in peaks:
-                    all_detections.append({
-                        'dm': dm,
-                        'freq': 1.0 / peak.period,
-                        'period': peak.period,
-                        'sigma': peak.snr,
-                        'width': peak.width,
-                    })
-
-                log.debug(f"DM={dm:.1f}: {len(peaks)} detections")
-
-            except Exception as e:
-                log.error(f"Error processing DM={dm:.1f}: {e}")
-                continue
-
-        log.info(f"Total raw detections: {len(all_detections)}")
-
-        if len(all_detections) == 0:
-            log.warning("No FFA detections found")
-            return None, None
-
-        # Cluster detections into candidates
-        ffa_candidates = self._cluster_detections(all_detections, ra, dec)
-
-        # Write outputs
-        if self.write_ffa_detections or self.write_ffa_candidates:
-            self._write_outputs(
-                all_detections,
-                ffa_candidates,
-                ra,
-                dec,
-                date,
-                basepath,
-            )
-
-        return all_detections, ffa_candidates
-
-    def _cluster_detections(self, detections, ra, dec):
-        """
-        Cluster raw detections into candidates.
-
-        Parameters
-        ----------
-        detections : list
-            List of detection dictionaries
-        ra : float
-            Right ascension
-        dec : float
-            Declination
-
-        Returns
-        -------
-        candidates : list
-            List of SinglePointingCandidate_FFA objects
-        """
-        if len(detections) == 0:
-            return []
-
-        log.info("Clustering FFA detections into candidates")
-
-        # Convert to structured array
-        detection_array = np.array(
-            [(d['dm'], d['freq'], d['sigma'], d['width']) for d in detections],
-            dtype=[('dm', float), ('freq', float), ('sigma', float), ('width', int)]
+        # Call the full FFA_search function from FFA_search.py
+        FFA_search(
+            dedisp_ts=dedisp_ts,
+            obs_id=obs_id,
+            date=date,
+            ra=ra,
+            dec=dec,
+            run_ffa_search=self.run_ffa_search,
+            create_periodogram_plots=self.create_periodogram_plots,
+            create_profile_plots=self.create_profile_plots,
+            write_ffa_detections=self.write_ffa_detections,
+            write_ffa_candidates=self.write_ffa_candidates,
+            write_ffa_stack=self.write_ffa_stack,
+            dm_downsample=self.dm_downsample,
+            dm_min=self.dm_min,
+            dm_max=self.dm_max,
+            p_min=2.0,
+            min_rfi_sigma=self.min_rfi_sigma,
+            min_detection_sigma=self.min_detection_sigma,
+            birdie_tolerance=self.birdie_tolerance,
+            num_threads=self.num_threads,
+            basepath=basepath,
         )
 
-        # Initialize clusterer
-        clusterer = Clusterer_FFA()
-
-        # Cluster detections
-        try:
-            clusters = clusterer.cluster(detection_array)
-            log.info(f"Created {len(clusters)} candidate clusters")
-
-            # Create candidate objects
-            candidates = []
-            for cluster in clusters:
-                candidate = SinglePointingCandidate_FFA(
-                    freq=cluster.freq,
-                    dm=cluster.dm,
-                    ra=ra,
-                    dec=dec,
-                    sigma=cluster.sigma,
-                    summary=cluster.summary,
-                    features=cluster.features,
-                    detections=cluster.detections,
-                    detection_statistic=SearchAlgorithm_FFA.periodogram_form,
-                )
-                candidates.append(candidate)
-
-            return candidates
-
-        except Exception as e:
-            log.error(f"Error clustering detections: {e}")
-            return []
-
-    def _write_outputs(self, detections, candidates, ra, dec, date, basepath):
-        """
-        Write FFA detections and candidates to disk.
-
-        Parameters
-        ----------
-        detections : list
-            Raw detections
-        candidates : list
-            Clustered candidates
-        ra : float
-            Right ascension
-        dec : float
-            Declination
-        date : datetime.datetime
-            Observation date
-        basepath : str
-            Base output path
-        """
-        # Create output directory
-        date_str = date.strftime("%Y/%m/%d")
-        output_dir = os.path.join(basepath, "ffa_output", date_str)
-        os.makedirs(output_dir, exist_ok=True)
-
-        pointing_str = f"{ra:.2f}_{dec:.2f}"
-
-        # Write detections
-        if self.write_ffa_detections and detections:
-            det_file = os.path.join(output_dir, f"{pointing_str}_FFA_detections.npz")
-            detection_array = np.array(
-                [(d['dm'], d['freq'], d['sigma'], d['width']) for d in detections],
-                dtype=[('dm', float), ('freq', float), ('sigma', float), ('width', int)]
-            )
-            np.savez(det_file, detections=detection_array)
-            log.info(f"Wrote {len(detections)} detections to {det_file}")
-
-        # Write candidates
-        if self.write_ffa_candidates and candidates:
-            cand_file = os.path.join(output_dir, f"{pointing_str}_FFA_candidates.npz")
-
-            # Serialize candidates
-            cand_data = {
-                'num_candidates': len(candidates),
-                'ras': np.array([c.ra for c in candidates]),
-                'decs': np.array([c.dec for c in candidates]),
-                'freqs': np.array([c.freq for c in candidates]),
-                'dms': np.array([c.dm for c in candidates]),
-                'sigmas': np.array([c.sigma for c in candidates]),
-            }
-
-            np.savez(cand_file, **cand_data)
-            log.info(f"Wrote {len(candidates)} candidates to {cand_file}")
 
 
 def initialise(config, num_threads=8):
@@ -366,7 +187,7 @@ def run(active_pointing, dedisp_ts, ffa_processor, basepath, date, birdies=None)
     Parameters
     ----------
     active_pointing : Pointing
-        Active pointing object with ra, dec
+        Active pointing object with ra, dec, obs_id
     dedisp_ts : DedispersedTimeSeries
         Dedispersed time series
     ffa_processor : FFAProcessor
@@ -378,19 +199,17 @@ def run(active_pointing, dedisp_ts, ffa_processor, basepath, date, birdies=None)
     birdies : list, optional
         Known RFI birdies
 
-    Returns
-    -------
-    ffa_detections : list
-        Raw detections
-    ffa_candidates : list
-        Clustered candidates
+    Notes
+    -----
+    FFA_search writes outputs directly to disk
     """
     log.info(
         f"FFA Search ({active_pointing.ra:.2f} {active_pointing.dec:.2f}) @ {date:%Y-%m-%d}"
     )
 
-    ffa_detections, ffa_candidates = ffa_processor.run_ffa_search_on_dedisp(
+    ffa_processor.run_ffa_search_on_dedisp(
         dedisp_ts=dedisp_ts,
+        obs_id=active_pointing.obs_id,
         ra=active_pointing.ra,
         dec=active_pointing.dec,
         date=date,
@@ -398,9 +217,4 @@ def run(active_pointing, dedisp_ts, ffa_processor, basepath, date, birdies=None)
         birdies=birdies,
     )
 
-    if ffa_candidates:
-        log.info(f"FFA search complete: {len(ffa_candidates)} candidates found")
-    else:
-        log.info("FFA search complete: no candidates found")
-
-    return ffa_detections, ffa_candidates
+    log.info("FFA search complete")

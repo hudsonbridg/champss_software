@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.14.0](https://github.com/chime-sps/champss_software/compare/v0.13.0...v0.14.0) (2025-10-09)
+
+
+### Features
+
+* Allow controller to write fixed nchan and use multiple mounts ([#159](https://github.com/chime-sps/champss_software/issues/159)) ([717d28f](https://github.com/chime-sps/champss_software/commit/717d28f2df5f910619e871e712517d064b3ae10f))
+* Allow setting datpath in multiday folding ([#163](https://github.com/chime-sps/champss_software/issues/163)) ([57b7b59](https://github.com/chime-sps/champss_software/commit/57b7b590a7a0f00c3e5bf718974c59d69e86e51d))
+* change default database server to sps-archiver1 ([#171](https://github.com/chime-sps/champss_software/issues/171)) ([a3d002d](https://github.com/chime-sps/champss_software/commit/a3d002db74a56bafdddcf93a7055bddbabc2bc72))
+* enable saving medians to database ([#160](https://github.com/chime-sps/champss_software/issues/160)) ([4fdd3ae](https://github.com/chime-sps/champss_software/commit/4fdd3aeaa7a207c53b03da942e68fbdfad6f6b8f))
+* Enable saving rednoise ([#149](https://github.com/chime-sps/champss_software/issues/149)) ([e62f672](https://github.com/chime-sps/champss_software/commit/e62f672a6c6956b1253102dbc1a4a984a34fa00e))
+* Faster loading of injection files, stricter injection identification and loading of empty candidate files ([#158](https://github.com/chime-sps/champss_software/issues/158)) ([595cddd](https://github.com/chime-sps/champss_software/commit/595cddd069ed0466bed03d8e6041fb730e6ca49c))
+* Rewrite frequency ranges ([#162](https://github.com/chime-sps/champss_software/issues/162)) ([c183586](https://github.com/chime-sps/champss_software/commit/c1835860118ef7152777ab94da552ea3851f38ce))
+
+
+### Bug Fixes
+
+* Allow sps-common to be installed as a dependency ([#165](https://github.com/chime-sps/champss_software/issues/165)) ([06f0218](https://github.com/chime-sps/champss_software/commit/06f02187847595934add5ddc0f87d2b8bbcb9ee9))
+
 ## [0.13.0](https://github.com/chime-sps/champss_software/compare/v0.12.1...v0.13.0) (2025-05-16)
 
 

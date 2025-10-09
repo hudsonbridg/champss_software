@@ -1094,14 +1094,20 @@ def FFA_search(
     log.info(f"FFA Write time: {time.time()-start_time}")
     log.info(f"Total FFA time: {time.time()-total_start_time}")
 
+    # Find the best candidate (highest S/N) if any exist
+    best_candidate = None
+    if len(candidates) > 0:
+        best_candidate = max(candidates, key=lambda c: c['sigma'])
+        log.info(f"Best candidate: F0: {best_candidate['freq']:.3f} DM: {best_candidate['dm']:.2f} Sigma: {best_candidate['sigma']:.2f}")
+
     del pgram_array
     del peaks_array
     del ts_array
     del detections
     del args, results
     del ts, ts_0, pgram_0, peaks_0, shifted_freqs
-    
-    return
+
+    return best_candidate
 
 log_stream = logging.StreamHandler()
 logging.root.addHandler(log_stream)

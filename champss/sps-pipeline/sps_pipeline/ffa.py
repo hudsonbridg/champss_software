@@ -2,6 +2,7 @@
 
 import logging
 import datetime
+import os
 import numpy as np
 from omegaconf import OmegaConf
 
@@ -132,11 +133,11 @@ class FFAProcessor:
         log.info(f"Starting FFA search on RA={ra:.2f}, DEC={dec:.2f}, Date={date}")
 
         # Get DM range
-        dm_max = self.dm_max if self.dm_max is not None else dedisp_ts.dm.max()
+        dm_max = self.dm_max if self.dm_max is not None else dedisp_ts.dms.max()
 
         # Downsample DM trials
-        dm_indices = np.arange(0, len(dedisp_ts.dm), self.dm_downsample)
-        dm_trials = dedisp_ts.dm[dm_indices]
+        dm_indices = np.arange(0, len(dedisp_ts.dms), self.dm_downsample)
+        dm_trials = dedisp_ts.dms[dm_indices]
 
         # Filter DM range
         dm_mask = (dm_trials >= self.dm_min) & (dm_trials <= dm_max)

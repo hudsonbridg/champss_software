@@ -47,7 +47,6 @@ except ImportError as e:
     import importlib_resources as pkg_resources
 
 
-from line_profiler import profile
 
 
 def apply_logging_config(level):
@@ -88,7 +87,6 @@ def lorentzian(x, x0, gamma, a):
     return a * (gamma**2 / ((x - x0)**2 + gamma**2))
 
 
-@profile
 def remove_baseline(pgram, b0=50, bmax=1000):
     """
     Remove the rising baseline from a raw periodogram. To do this, split up the periodogram into
@@ -158,7 +156,6 @@ def remove_baseline(pgram, b0=50, bmax=1000):
 #     return pgram
 
 
-@profile
 def standardize_pgram(pgram, dm):
     """
     Standardize the noise distribution of a periodogram such that it is a Gaussian with mean=0, stdev=1
@@ -183,7 +180,6 @@ def standardize_pgram(pgram, dm):
     
     return pgram
 
-@profile
 def barycentric_shift(pgram, shifted_freqs, shift_min, shift_max):
     """
     Shifts a standardized periodogram's snrs such that the frequency is barycentric rather than topocentric.
@@ -202,7 +198,6 @@ def barycentric_shift(pgram, shifted_freqs, shift_min, shift_max):
 
     return pgram
 
-@profile
 def rogue_width_filter(peaks, snrs, widths):
     """
     Remove peaks whose trial width bin is much stronger than the others
@@ -221,7 +216,6 @@ def rogue_width_filter(peaks, snrs, widths):
 
     return filtered_peaks
 
-@profile
 def remove_duplicates(peaks):
     """
     Remove peaks with duplicate periods such that only the strongest sigma remains
@@ -243,7 +237,6 @@ def remove_duplicates(peaks):
 #####################                  ###################
 ##########################################################
     
-@profile
 def periodogram_form(
         tseries_np,
         dm,
@@ -601,7 +594,6 @@ def main(
 #####################                  ###################
 ##########################################################
 
-@profile
 def FFA_search(
     dedisp_ts,
     obs_id,

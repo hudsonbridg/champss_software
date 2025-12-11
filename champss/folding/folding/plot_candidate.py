@@ -9,7 +9,7 @@ from scipy.optimize import curve_fit
 from astropy.time import Time
 from astropy.coordinates import SkyCoord
 
-from folding.archive_utils import clean_foldspec, get_SN, readpsrarch
+from folding.archive_utils import clean_foldspec, get_SN, readpsrarch, compute_profile_SNs
 from folding.known_source_matching import find_matching_sources
 from matplotlib.gridspec import GridSpec
 from multiday_search.phase_aligned_search import phase_loop
@@ -368,8 +368,7 @@ def plot_candidate_archive(
             F0profs[i_f0] = np.nanmean(prof2D_shifted, 0)
 
         # Compute S/N for each F0 trial
-        #F0_SNs = np.array([get_SN(prof) for prof in F0profs])
-        F0_SNs = np.max(F0profs, axis=-1)
+        F0_SNs = compute_profile_SNs(F0profs)
         i_f0_best = np.argmax(F0_SNs)
         f0_best = f0s[i_f0_best]
         F0_prof_best = F0profs[i_f0_best]
@@ -418,9 +417,8 @@ def plot_candidate_archive(
         P_sec = P.to(u.s).value
         DMprofs = dm_shift_loop(fs_fp, DMs, freq, f_ref, P_sec, npbin)
 
-        # Compute S/N for each DM trial (before tiling)
-        #DM_SNs = np.array([get_SN(prof) for prof in DMprofs])
-        DM_SNs = np.max(DMprofs, axis=-1)
+        # Compute S/N for each DM trial
+        DM_SNs = compute_profile_SNs(DMprofs)
         i_dm_best = np.argmax(DM_SNs)
         dm_best = dm + DMs[i_dm_best]
 
@@ -560,7 +558,7 @@ def plot_candidate_archive(
     dm_best_str = f"{dm_best:.2f}" if dm_best is not None else "N/A"
     df0_best_str = f"{f0_best:.2e}" if f0_best is not None else "N/A"
     f0_best_str = f"{f0+f0_best:.5f}" if f0_best is not None else "N/A"
-    f1_best_str = f"{f1_best:.5f}" if f1_best is not None else "N/A"
+    f1_best_str = f"{f1_best:.2e}" if f1_best is not None else "N/A"
     P0_best = 1/(f0+f0_best) if f0_best is not None else "N/A"
     P0_best_str = f"{P0_best:.5f}" if P0_best is not None else "N/A"
 

@@ -321,10 +321,10 @@ def plot_foldspec(fn):
     ax0.set_xticks([])
 
 
-def get_SN(profile, return_profile=False):
+def get_SN(profile, return_profile=False, offpulse=True):
     """
     Get S/N of 1D pulse profile by smoothing over different pulse widths,
-    in powers of 2 up to 1/2 the pulse width
+    in powers of 2 up to 1/4 the pulse width
 
     Input: 1D array of pulse profile
 
@@ -334,20 +334,29 @@ def get_SN(profile, return_profile=False):
     from scipy.ndimage import uniform_filter
 
     ngate = len(profile)
-    maxbin = int(np.log2(ngate // 2))
+    # More conservative max width - only up to 1/4 of profile
+    maxbin = int(np.log2(ngate // 4))
 
-    binning = 2 ** np.arange(maxbin)
+    if offpulse:
+        # Precompute mean and std dev from bottom 3/4 of sorted profile
+        profsort = np.sort(profile)
+        prof_N = profsort[: int(3 * ngate / 4)]
+        sigma_off = np.std(prof_N)
+        prof_mean = np.mean(prof_N)
+    else:
+        sigma_off = np.std(profile)
+        prof_mean = np.mean(profile)
+
+    binning = 2 ** np.arange(maxbin + 1)
     SNprofs = np.zeros((len(binning), len(profile)))
 
     SNmax = 0
     for i, b in enumerate(binning):
+        # Scale noise by sqrt(width) to account for boxcar smoothing
+        scaled_sigma = sigma_off / np.sqrt(b)
+
         prof_filtered = uniform_filter(profile, b)
-        profsort = np.sort(prof_filtered)
-        # For S/N computation, compute mean, std dev from bottom 1/2 of profile
-        prof_N = profsort[: ngate // 2]
-        std = np.std(prof_N)
-        mean = np.mean(prof_N)
-        SNprof = (prof_filtered - mean) / std
+        SNprof = (prof_filtered - prof_mean) / scaled_sigma
         SNprofs[i] = SNprof
 
         if np.max(SNprof) > SNmax:
@@ -357,6 +366,66 @@ def get_SN(profile, return_profile=False):
     if return_profile:
         return SNmax, SNprofs[0]
     return SNmax
+
+
+def compute_profile_SNs(profiles):
+    """
+    Compute S/N for multiple profiles using statistics computed across the 2D array.
+    This matches the stable S/N computation from phase_aligned_search.py, reducing
+    peaks/divergences from repeated noise estimation of every profile
+
+    Parameters
+    ----------
+    profiles : ndarray
+        2D array of profiles with shape (n_trials, npbin)
+
+    Returns
+    -------
+    SNs : ndarray
+        S/N values for each profile
+    """
+    npbin = profiles.shape[1]
+
+    # Pre-compute noise from average of all profiles
+    sigma_off = np.std(np.nanmean(profiles, axis=0))
+
+    # Pre-compute boxcar widths and scaled noise
+    max_exp = int(np.log2(npbin // 4))
+    n_widths = max_exp + 1
+    widths = 2 ** np.arange(n_widths)
+    scaled_sigmas = sigma_off / np.sqrt(widths)
+
+    # Compute S/N for each profile
+    SNs = np.zeros(len(profiles))
+    for i_prof, prof in enumerate(profiles):
+        prof_mean = np.nanmean(prof)
+        snmax = 0.0
+
+        # Cumulative sum for boxcar computation
+        cumsum = np.zeros(npbin + 1)
+        for idx in range(npbin):
+            cumsum[idx + 1] = cumsum[idx] + prof[idx]
+
+        for iw in range(n_widths):
+            width = widths[iw]
+            # Find max of boxcar-filtered profile
+            boxcar_max = -1e30
+            for idx in range(npbin):
+                end_idx = idx + width
+                if end_idx <= npbin:
+                    val = (cumsum[end_idx] - cumsum[idx]) / width
+                else:
+                    val = (cumsum[npbin] - cumsum[idx] + cumsum[end_idx - npbin]) / width
+                if val > boxcar_max:
+                    boxcar_max = val
+
+            sn = (boxcar_max - prof_mean) / scaled_sigmas[iw]
+            if sn > snmax:
+                snmax = sn
+
+        SNs[i_prof] = snmax
+
+    return SNs
 
 
 def read_par(parfile):

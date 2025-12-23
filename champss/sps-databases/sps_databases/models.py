@@ -875,12 +875,7 @@ class Process:
 
     @property
     def ram_requirement(self):
-        # Very long processes will be split into multiple processing runs
-        ntime = min(self.ntime, 2**22)
-        return min(
-            100.0,
-            4 + (self.maxdm * 0.04 + ntime * 6e-6) * 2 ** (ntime // 2**20),
-        )
+        return min(100.0, (4 + self.maxdm * 0.05 + self.ntime * 1.35e-5))
 
     @property
     def tier(self):
@@ -917,23 +912,23 @@ class DailyRun:
     # status = attrib(validator=validators.in_(DailyStatus), type=DailyStatus)
     schedule_result = attrib(
         default={},
-        converter=dict,
+        converter=converters.optional(dict),
     )
     pipeline_result = attrib(
         default={},
-        converter=dict,
+        converter=converters.optional(dict),
     )
     multipointing_result = attrib(
         default={},
-        converter=dict,
+        converter=converters.optional(dict),
     )
     classification_result = attrib(
         default={},
-        converter=dict,
+        converter=converters.optional(dict),
     )
     folding_result = attrib(
         default={},
-        converter=dict,
+        converter=converters.optional(dict),
     )
     last_changed = attrib(
         validator=validators.instance_of(dt.datetime), default=Factory(dt.datetime.now)

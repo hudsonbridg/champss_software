@@ -894,15 +894,19 @@ def run_all_pipeline_processes(
         if not first_loop:
             running_tasks = 0
             running_tiers = {tier: 0 for tier in processing_tier_names}
+            running_tiers_string = {}
             for i, tier in enumerate(processing_tier_names):
                 service_tasks = docker_client.services.get(services[i]).tasks()
                 running_tasks_per_tier = sum(
                     1 for task in service_tasks if task["Status"]["State"] == "running"
                 )
                 running_tasks += running_tasks_per_tier
-                running_tiers[tier] = f"{running_tasks_per_tier}/{upcoming_tags[tier]}"
+                running_tiers_string[tier] = (
+                    f"{running_tasks_per_tier}/{upcoming_tags[tier]}"
+                )
+                running_tiers[tier] = running_tasks_per_tier
             log.info(
-                f"Currently running distribution with {running_tasks} containers: {running_tiers}"
+                f"Currently running distribution with {running_tasks} containers: {running_tiers_string}"
             )
             requested_containers = max(
                 running_tasks + surplus_replicas, 2 * surplus_replicas

@@ -226,8 +226,8 @@ class PowerSpectraSearch:
 
         if injection_path is not None:
             injection_dicts = []
-            if 'random' in injection_path:
-                if injection_path == 'random':
+            if "random" in injection_path:
+                if injection_path == "random":
                     n_injections = 1
                 else:
                     n_injections = int(injection_path[-1])
@@ -331,7 +331,7 @@ class PowerSpectraSearch:
                 static_filter = StaticPeriodicFilter.from_ks_list(filtered_sources)
                 bad_freq_indices = static_filter.apply_static_mask(pspec.freq_labels, 0)
 
-                dummy_spec = np.zeros(self.padded_length // 2)
+                dummy_spec = np.zeros(len(pspec.freq_labels))
                 dummy_spec[bad_freq_indices] = 1
                 dummy_harmonics = dummy_spec[self.full_harm_bins]
                 log.info(

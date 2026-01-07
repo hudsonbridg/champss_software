@@ -11,8 +11,8 @@ import os
 import click
 from astropy.time import Time
 
-from folding.fold_candidate import create_ephemeris
-from folding.archive_utils import read_par
+from folding.utilities.utils import create_ephemeris
+from folding.utilities.archives import read_par
 from sps_databases import db_api, db_utils
 
 

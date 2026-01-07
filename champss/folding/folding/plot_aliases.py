@@ -1,10 +1,3 @@
-"""
-Plot profiles and S/N for frequency alias folding results.
-
-This script reads archive files from alias folding and creates
-diagnostic plots showing the profile at each alias factor and S/N vs alias.
-"""
-
 import glob
 import os
 import re
@@ -13,7 +6,7 @@ import click
 import matplotlib.pyplot as plt
 import numpy as np
 
-from folding.archive_utils import get_SN, readpsrarch
+from folding.utilities.archives import get_SN, readpsrarch
 
 
 def get_alias_factor_from_label(label):

@@ -1,10 +1,89 @@
+"""
+Database utilities for folding operations.
+
+This module contains functions for interacting with the followup_sources database.
+"""
+
 import os
 
 import numpy as np
+import pymongo
+from bson.objectid import ObjectId
 from sps_databases import db_api, db_utils
 
 
+def get_pulsar_coords_from_timing_db(psr, server_url="mongodb://sps-archiver1:27017/", db_name="timing_ops"):
+    """
+    Get RA and Dec for a pulsar from the timing_ops database.
+
+    Parameters
+    ----------
+    psr : str
+        Pulsar name (psr_id)
+    server_url : str
+        MongoDB server URL
+    db_name : str
+        Database name
+
+    Returns
+    -------
+    ra : float
+        Right ascension in degrees
+    dec : float
+        Declination in degrees
+    """
+    client = pymongo.MongoClient(server_url)
+    database = client[db_name]
+    collection = database["sources"]
+
+    source = collection.find_one({'psr_id': psr})
+    if not source:
+        raise ValueError(f"Pulsar {psr} not found in timing_ops database")
+
+    return source['ra'], source['dec']
+
+
+def update_folding_history(id, payload):
+    """
+    Updates a followup_source with the given attribute and values as a dict.
+
+    Parameters
+    ----------
+    id: str or ObjectId
+        The id of the followup source to be updated
+
+    payload: dict
+        The dict of the attributes and values to be updated
+
+    Returns
+    -------
+    followup_source: dict
+        The dict of the updated followup source
+    """
+    db = db_utils.connect()
+    if isinstance(id, str):
+        id = ObjectId(id)
+    return db.followup_sources.find_one_and_update(
+        {"_id": id},
+        {"$push": payload},
+        return_document=pymongo.ReturnDocument.AFTER,
+    )
+
+
 def scrape_ephemeris(ephem_path):
+    """
+    Parse ephemeris file and extract source parameters.
+
+    Parameters
+    ----------
+    ephem_path : str
+        Path to ephemeris file
+
+    Returns
+    -------
+    payload : dict
+        Dictionary containing source parameters
+    """
     from beamformer.utilities.dm import DMMap
 
     dmm = DMMap()
@@ -62,8 +141,13 @@ def scrape_ephemeris(ephem_path):
 
 
 def add_knownsource_to_fsdb(ephem_path):
-    """Create a payload for a known source to be input in the followup sources
-    database.
+    """
+    Create a payload for a known source to be input in the followup sources database.
+
+    Parameters
+    ----------
+    ephem_path : str
+        Path to ephemeris file
     """
     db = db_utils.connect()
     payload = scrape_ephemeris(ephem_path)
@@ -101,7 +185,35 @@ def add_candidate_to_fsdb(
     source_type="sd_candidate",
     path_to_ephemeris=None,
 ):
-    """Create a payload for a candidate to be input in the followup sources database."""
+    """
+    Create a payload for a candidate to be input in the followup sources database.
+
+    Parameters
+    ----------
+    date_str : str
+        Date string in YYYYMMDD format
+    ra : float
+        Right ascension in degrees
+    dec : float
+        Declination in degrees
+    f0 : float
+        Spin frequency in Hz
+    dm : float
+        Dispersion measure in pc/cm^3
+    sigma : float
+        Detection sigma
+    cand_path : str, optional
+        Path to candidate file
+    source_type : str, optional
+        Type of source ("sd_candidate" or "md_candidate")
+    path_to_ephemeris : str, optional
+        Path to ephemeris file
+
+    Returns
+    -------
+    fs : dict
+        Followup source document
+    """
     from beamformer.utilities.dm import DMMap
 
     dmm = DMMap()
@@ -157,6 +269,21 @@ def add_candidate_to_fsdb(
 
 
 def add_mdcand_from_candpath(candpath, date):
+    """
+    Add a multi-day candidate to followup sources database from candidate file.
+
+    Parameters
+    ----------
+    candpath : str
+        Path to candidate file
+    date : datetime
+        Observation date
+
+    Returns
+    -------
+    fs_id : ObjectId
+        Followup source ID
+    """
     from sps_common.interfaces import MultiPointingCandidate
 
     date_str = date.strftime("%Y%m%d")
@@ -175,6 +302,21 @@ def add_mdcand_from_candpath(candpath, date):
 
 
 def add_mdcand_from_psrname(psrname, date):
+    """
+    Add a multi-day candidate to followup sources database from pulsar name.
+
+    Parameters
+    ----------
+    psrname : str
+        Pulsar name
+    date : datetime
+        Observation date
+
+    Returns
+    -------
+    fs_id : ObjectId
+        Followup source ID
+    """
     source = db_api.get_known_source_by_names(psrname)[0]
 
     f0 = 1 / source.spin_period_s

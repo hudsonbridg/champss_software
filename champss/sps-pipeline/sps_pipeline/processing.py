@@ -12,6 +12,7 @@ from multiprocessing import Pool
 import pymongo
 import atexit
 import pandas as pd
+from bson.objectid import ObjectId
 
 import click
 import docker
@@ -972,6 +973,7 @@ def run_all_pipeline_processes(
 )
 @click.option(
     "--number-of-days",
+    "--ndays",
     default=-1,
     type=int,
     help="Number of days to perform continuous processing on. -1 (default) for forever",
@@ -1307,7 +1309,7 @@ def start_processing_manager(
                         {"date": date_string, "status": 2, "is_in_stack": False}
                     )
 
-                    obs_ids = [proc["obs_id"] for proc in completed_processes]
+                    obs_ids = [ObjectId(proc["obs_id"]) for proc in completed_processes]
                     observations = list(db.observations.find({"_id": {"$in": obs_ids}}))
                     mean_detections = np.nanmean(
                         [obs["num_detections"] for obs in observations]
@@ -1857,8 +1859,8 @@ def start_processing_services(
     log.info(f"Creating Docker Service: \n{docker_service_manager}")
     docker_client.services.create(**docker_service_manager)
 
-    log.info(f"Creating Docker Service: \n{docker_service_pipeline_image_clenaup}")
-    docker_client.services.create(**docker_service_pipeline_image_clenaup)
+    # log.info(f"Creating Docker Service: \n{docker_service_pipeline_image_clenaup}")
+    # docker_client.services.create(**docker_service_pipeline_image_clenaup)
 
 
 def remove_processing_services(signal, frame):

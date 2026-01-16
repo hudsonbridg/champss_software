@@ -14,7 +14,7 @@ from astropy.time import Time, TimeDelta
 from attr.validators import deep_iterable, instance_of
 from beamformer.utilities.common import get_data_list
 from numpy._typing import ArrayLike
-from rfi_mitigation.pipeline import RFIPipeline
+from rfi_mitigation.pipeline import RFIPipeline, RFIGlobalPipeline
 from scipy import linalg
 from scipy.signal import detrend
 from sps_common.constants import TSAMP
@@ -245,6 +245,15 @@ class SkyBeamFormer:
     masking_dict: dict
         The dictionary of the configuration for the RFI mitigation process. Default = {}
 
+    global_masking_dict: dict
+        The dictionary of the configuration for the global RFI mitigation process
+        (runs on full dataset after filling). Default = {}
+
+    subtract_incoh_beam: str or None
+        Path to incoherent beam .npz file to subtract from data, or None to disable.
+        The incoherent beam should contain 'data', 'unix_start', and 'unix_end' fields.
+        Default = None
+
     active_beams: List[int]
         The list of beam columns to be used for beamforming from 0 to 3. Default [0, 1, 2, 3]
     """
@@ -266,6 +275,7 @@ class SkyBeamFormer:
     min_data_frac = attr.ib(default=0.0, validator=instance_of(float))
     run_rfi_mitigation = attr.ib(default=True, validator=instance_of(bool))
     masking_dict = attr.ib(default={}, validator=instance_of(dict), type=dict)
+    global_masking_dict = attr.ib(default={}, validator=instance_of(dict), type=dict)
     active_beams = attr.ib(
         default=[0, 1, 2, 3],
         validator=deep_iterable(
@@ -273,7 +283,9 @@ class SkyBeamFormer:
         ),
     )
     rfi_pipeline = attr.ib(init=False)
+    rfi_global_pipeline = attr.ib(init=False)
     max_mask_frac = attr.ib(default=1.0, validator=instance_of(float))
+    subtract_incoh_beam = attr.ib(default=None)
 
     @extn.validator
     def _validate_extension(self, attribute, value):
@@ -320,9 +332,15 @@ class SkyBeamFormer:
             assert v in [0, 1, 2, 3], "the active beams must be either 0, 1, 2 or 3"
 
     def __attrs_post_init__(self):
-        """Create RFIPipeline instance."""
+        """Create RFIPipeline instances."""
         if self.run_rfi_mitigation:
             self.rfi_pipeline = RFIPipeline(self.masking_dict, make_plots=False)
+            # Create global pipeline for post-fill cleaning on full dataset
+            # Only create if global_masking_dict has any True values
+            if self.global_masking_dict and any(self.global_masking_dict.values()):
+                self.rfi_global_pipeline = RFIGlobalPipeline(self.global_masking_dict, make_plots=False)
+            else:
+                self.rfi_global_pipeline = None
 
     def form_skybeam(self, active_pointing, num_threads=1):
         """
@@ -427,6 +445,99 @@ class SkyBeamFormer:
             for slice in raw_spec_slice_list
         ]
         log.info("Finished loading.")
+
+        # Subtract incoherent beam if specified
+        if self.subtract_incoh_beam is not None:
+            log.info(f"Subtracting incoherent beam from {self.subtract_incoh_beam}")
+            incoh_data = np.load(self.subtract_incoh_beam)
+            incoh_beam = incoh_data['data']  # Shape: [nfreq, ntime]
+            incoh_unix_start = float(incoh_data['unix_start'])
+            incoh_unix_end = float(incoh_data['unix_end'])
+            incoh_nchan = int(incoh_data['nchan'])
+
+            # Validate that incoherent beam is 2D
+            if incoh_beam.ndim != 2:
+                mask_shared.close()
+                mask_shared.unlink()
+                raise ValueError(
+                    f"Incoherent beam must be 2D [nfreq, ntime], got shape {incoh_beam.shape}"
+                )
+
+            log.info(f"Incoherent beam shape: {incoh_beam.shape} (nfreq={incoh_nchan}, ntime={incoh_beam.shape[1]})")
+
+            # Calculate observation time range
+            obs_unix_end = utc_start + spectra_shape[1] * TSAMP
+
+            # Check if incoherent beam covers observation time range
+            # NOTE: Incoherent beam can be longer than observation, we'll read only the overlapping part
+            if incoh_unix_end < obs_unix_end:
+                mask_shared.close()
+                mask_shared.unlink()
+                raise ValueError(
+                    f"Incoherent beam ends before observation ends. "
+                    f"Observation end: {obs_unix_end}, Incoherent beam end: {incoh_unix_end}"
+                )
+
+            if incoh_unix_start > utc_start:
+                mask_shared.close()
+                mask_shared.unlink()
+                raise ValueError(
+                    f"Incoherent beam starts after observation starts. "
+                    f"Observation start: {utc_start}, Incoherent beam start: {incoh_unix_start}"
+                )
+
+            # Calculate time offset and extract only the overlapping time range
+            time_offset_samples = round((utc_start - incoh_unix_start) / TSAMP)
+            time_end_sample = time_offset_samples + spectra_shape[1]
+
+            log.info(f"Reading incoherent beam time range: samples {time_offset_samples} to {time_end_sample}")
+
+            # Extract the overlapping time slice
+            incoh_slice = incoh_beam[:, time_offset_samples:time_end_sample]
+
+            # Ensure we have the right time length
+            if incoh_slice.shape[1] < spectra_shape[1]:
+                log.warning(f"Incoherent beam shorter than needed: {incoh_slice.shape[1]} < {spectra_shape[1]}")
+                # Pad with NaN (will be masked later)
+                padded = np.full((incoh_slice.shape[0], spectra_shape[1]), np.nan, dtype=incoh_beam.dtype)
+                padded[:, :incoh_slice.shape[1]] = incoh_slice
+                incoh_slice = padded
+
+            # Handle channel tiling for finer channelization
+            # Incoherent beam is always 1024 channels, but spectra can have finer channelization
+            if spectra_shape[0] != incoh_nchan:
+                if spectra_shape[0] % incoh_nchan != 0:
+                    mask_shared.close()
+                    mask_shared.unlink()
+                    raise ValueError(
+                        f"Spectra channel count ({spectra_shape[0]}) must be a multiple of "
+                        f"incoherent beam channel count ({incoh_nchan})"
+                    )
+
+                tile_factor = spectra_shape[0] // incoh_nchan
+                log.info(f"Tiling incoherent beam by factor {tile_factor} to match finer channelization")
+                log.info(f"  Incoherent beam: {incoh_nchan} channels -> Spectra: {spectra_shape[0]} channels")
+
+                # Tile along channel axis: repeat each channel tile_factor times
+                incoh_slice = np.tile(incoh_slice, (tile_factor, 1))
+
+            log.info(f"Subtracting 2D incoherent beam (shape: {incoh_slice.shape})")
+            log.info("  Method: Channelized subtraction with tiling support")
+
+            # Subtract the incoherent beam
+            spectra[:, :] -= incoh_slice
+
+            # Handle any invalid values created by subtraction (NaN, Inf)
+            # Note: Negative values are valid after subtraction (noise fluctuations)
+            invalid_mask = ~np.isfinite(spectra)
+            if np.any(invalid_mask):
+                num_invalid = invalid_mask.sum()
+                frac_invalid = num_invalid / spectra.size
+                log.warning(f"Incoherent beam subtraction created {num_invalid} NaN/Inf values "
+                           f"({frac_invalid:.4f} of data). Masking these.")
+                spectra[invalid_mask] = 0
+                rfi_mask[invalid_mask] = True
+
         # For now separate the spectrum that each thread gets one part
         # Splitting it too small might increase memory usage
         # Can set minimal length here
@@ -536,6 +647,45 @@ class SkyBeamFormer:
             ),
             nsub_slices,
         )
+
+        # Global RFI pass: run on full dataset after zero replacement
+        # This allows cleaner statistics since masked regions are now filled
+        if self.run_rfi_mitigation and self.rfi_global_pipeline is not None:
+            log.info("Starting global RFI cleaning on zero-filled dataset.")
+            log.info(
+                "Pre-global-clean masking Fraction:"
+                f" {(rfi_mask.sum() / rfi_mask.size):.4f}"
+            )
+            self.rfi_global_pipeline.clean(
+                spectra_shared.name,
+                mask_shared.name,
+                spectra_shape,
+                spec_dtype,
+            )
+            log.info(
+                "Global RFI cleaning finished. New masking Fraction:"
+                f" {(rfi_mask.sum() / rfi_mask.size):.4f}"
+            )
+
+            # Apply the updated mask to the spectra (zero out newly masked regions)
+            log.info("Applying global RFI mask to spectra")
+            spectra[rfi_mask] = 0
+
+            # Re-run zero replacement to fill newly masked regions using the existing pool
+            log.info("Re-running zero replacement after global RFI cleaning")
+            pool.map(
+                partial(
+                    self.zero_replace_shared_spectra,
+                    spectra_shared.name,
+                    mask_shared.name,
+                    spectra_shape,
+                    spec_dtype,
+                    flatten_bandpass=self.flatten_bandpass,
+                ),
+                nsub_slices,
+            )
+            log.info("Zero replacement complete")
+
         completely_masked_channels = rfi_mask.min(axis=1).sum()
         log.info(
             "Fraction of completely masked channels:"

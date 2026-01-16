@@ -14,6 +14,8 @@ rfi:
   sk: True           # run spectral kurtosis filter
   powspec: False     # run power spectrum cleaner
   dummy: False       # run a dummy filter that does nothing
+rfi_global:
+  stddev: True       # run standard deviation channel cleaner on full dataset after filling
 beamform:
   nbits: 32
   nsub: 16384
@@ -26,6 +28,7 @@ beamform:
   beam_to_normalise: 1
   flatten_bandpass: True
   max_mask_frac: 0.9
+  subtract_incoh_beam: null  # Path to incoherent beam .npz file, or null to disable
 dedisp:
   numdms: 40
   maxdm: 1700

@@ -936,7 +936,7 @@ def stack_and_search(
     - search-monthly: run the searching of the monthly stack
     """
 
-    multiprocessing.set_start_method("forkserver")
+    multiprocessing.set_start_method("forkserver", force=True)
     sys.excepthook = dbexcepthook
     global pipeline_start_time
     pipeline_start_time = time.time()
@@ -1029,7 +1029,7 @@ def stack_and_search(
                 plot,
                 plot_threshold,
                 config.cands.get("write_harmonically_related_clusters", False),
-                False,
+                True,
                 injection_path,
                 injection_idx,
                 only_injections,

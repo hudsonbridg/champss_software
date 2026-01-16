@@ -112,11 +112,19 @@ class Pointing:
             db.ps_stacks.find_one({"pointing_id": ObjectId(self.id)})
         )
 
-    # hhat_stack = relationship("HhatStack", back_populates="pointing")
-    def hhat_stack(self, db):
-        return HhatStack.from_db(
-            db.hhat_stacks.find_one({"pointing_id": ObjectId(self.id)})
-        )
+    @property
+    def ram_requirement(self):
+        return ram_requirement(self.maxdm, self.length)
+
+    @property
+    def tier(self):
+        ram_requirement = self.ram_requirement
+        for index, mem_limit in enumerate(processing_tier_limits):
+            if ram_requirement < mem_limit:
+                break
+        tier_name = processing_tier_names[index]
+        tier_limit = processing_tier_limits[index]
+        return tier_name, tier_limit
 
 
 @attrs
@@ -625,67 +633,6 @@ class PsStack:
 
 
 @attrs
-class HhatStack:
-    pointing_id = attrib(converter=str)
-    datapath_month = attrib(converter=str)
-    datapath_cumul = attrib(converter=str)
-    datetimes_month = attrib(
-        validator=validators.deep_iterable(
-            member_validator=validators.instance_of(dt.datetime),
-            iterable_validator=validators.instance_of(list),
-        )
-    )
-    num_days_month = attrib(converter=int)
-    datetimes_cumul = attrib(
-        validator=validators.deep_iterable(
-            member_validator=validators.instance_of(dt.datetime),
-            iterable_validator=validators.instance_of(list),
-        )
-    )
-    num_days_cumul = attrib(converter=int)
-    sliced_by = attrib(converter=str)
-    r_value = attrib(converter=float)
-    _id = attrib(
-        default=None,
-        alias="_id",
-        converter=converters.optional(str),
-        on_setattr=convert,  # type: ignore
-    )
-
-    @datetimes_month.validator
-    @datetimes_cumul.validator
-    def _validate_datetimes(self, attribute, value):
-        for val in value:
-            if not (val.tzinfo and val.utcoffset().total_seconds() == 0):
-                raise ValueError(
-                    f"The tzinfo of the elements of {attribute.name} = {val.tzinfo} are"
-                    " not utc"
-                )
-
-    @property
-    def id(self):
-        return self._id
-
-    @classmethod
-    def from_db(cls, doc):
-        """Create an `HhatStack` instance from a MongoDB document."""
-        filtered_doc = filter_class_dict(cls, doc)
-        obj = cls(**filtered_doc)
-        return obj
-
-    def to_db(self):
-        """Return a MongoDB document version of this instance."""
-        doc = asdict(self)
-        doc["_id"] = ObjectId(self.id)
-        doc["pointing_id"] = ObjectId(self.pointing_id)
-        return doc
-
-    # pointing = relationship("Pointing", back_populates="hhat_stack")
-    def pointing(self, db):
-        return Pointing.from_db(db.pointings.find_one(ObjectId(self.pointing_id)))
-
-
-@attrs
 class KnownSource:
     source_type = attrib(converter=int)
     source_name = attrib(converter=str)
@@ -876,7 +823,7 @@ class Process:
 
     @property
     def ram_requirement(self):
-        return min(100.0, (4 + self.maxdm * 0.05 + self.ntime * 1.35e-5))
+        return ram_requirement(self.maxdm, self.ntime)
 
     @property
     def tier(self):
@@ -905,6 +852,10 @@ class Process:
         doc["status"] = self.status.value
         doc["obs_status"] = self.obs_status.value
         return doc
+
+
+def ram_requirement(maxdm, ntime):
+    return min(100.0, (4 + maxdm * 0.05 + ntime * 1.35e-5))
 
 
 @attrs
@@ -959,6 +910,64 @@ class DailyRun:
     @property
     def status(self):
         steps = ["schedule", "pipeline", "multipointing", "classification", "folding"]
+        status = 0
+        for step in steps:
+            if getattr(self, f"{step}_result", {}) != {}:
+                status += 1
+            else:
+                break
+        return status
+
+
+@attrs
+class StackSearchRun:
+    date = attrib(validator=validators.instance_of(dt.date))
+    # status = attrib(validator=validators.in_(DailyStatus), type=DailyStatus)
+    name = attrib(converter=str)
+    pipeline_result = attrib(
+        default={},
+        converter=converters.optional(dict),
+    )
+    multipointing_result = attrib(
+        default={},
+        converter=converters.optional(dict),
+    )
+    classification_result = attrib(
+        default={},
+        converter=converters.optional(dict),
+    )
+    folding_result = attrib(
+        default={},
+        converter=converters.optional(dict),
+    )
+    last_changed = attrib(
+        validator=validators.instance_of(dt.datetime), default=Factory(dt.datetime.now)
+    )
+    plots = attrib(
+        default={},
+        converter=dict,
+    )
+
+    @property
+    def id(self):
+        return self._id
+
+    @classmethod
+    def from_db(cls, doc):
+        """Create a `DailyRun` instance from a MongoDB document."""
+        filtered_doc = filter_class_dict(cls, doc)
+        obj = cls(**filtered_doc)
+        return obj
+
+    def to_db(self):
+        """Return a MongoDB document version of this instance."""
+        doc = asdict(self)
+        doc["_id"] = ObjectId(self.id)
+        return doc
+
+    @property
+    def status(self):
+        steps = ["pipeline", "multipointing", "classification", "folding"]
         status = 0
         for step in steps:
             if getattr(self, f"{step}_result", {}) != {}:

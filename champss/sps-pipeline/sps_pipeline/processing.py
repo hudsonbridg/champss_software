@@ -1740,7 +1740,7 @@ def start_processing_manager(
                     "database": "champss",
                     "port": 3306,
                 }
-                min_sigma_folded = 9
+                min_sigma_folded = 7
                 try:
                     with (
                         CandidateViewerRegistrar(

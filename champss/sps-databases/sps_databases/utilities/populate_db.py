@@ -28,7 +28,9 @@ if "pointings" in db.list_collection_names():
 
 # Add pointings
 print("Load the pointings map")
-pointings = json.load(open("./pointings_map_v1-3.json"))
+pointings = json.load(
+    open("../../../beamformer/beamformer/data/pointings_map_v2-0.json")
+)
 for p in pointings:
     p["search_algorithm"] = models.SearchAlgorithm.power_spec.value
 

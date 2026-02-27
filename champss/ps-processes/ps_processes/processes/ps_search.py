@@ -3,8 +3,8 @@
 import logging
 import time
 from functools import partial
-from multiprocessing import Pool, shared_memory
 import yaml
+from multiprocessing import Pool, shared_memory, set_start_method
 import datetime
 
 import numpy as np
@@ -174,9 +174,9 @@ class PowerSpectraSearch:
     def search(
         self,
         pspec,
-        injection_path,
-        injection_indices,
-        only_injections,
+        injection_path=None,
+        injection_indices=[],
+        only_injections=False,
         scale_injections=False,
     ):
         """
@@ -214,6 +214,9 @@ class PowerSpectraSearch:
             PowerSpectraDetectionClusters object with the properties of all the
             detections clusters from the pointing.
         """
+        # Spawn multiprocessing method does not work nicely with shared arrays
+        set_start_method("forkserver", force=True)
+
         ps_length = ((len(pspec.freq_labels)) // self.num_harm) * self.num_harm
         # compute harmonic bins based on power spectra properties
         if not self.precompute_harms:
@@ -322,7 +325,8 @@ class PowerSpectraSearch:
                 all_arc_psrs = self.arc_filter_config["filtered_pulsars"]
                 arc = get_arc_for_beam(
                     current_pointing.beam_row,
-                    pspec.datetimes[-1]
+                    pspec.
+                  s[-1]
                     + datetime.timedelta(seconds=current_pointing.length * TSAMP / 2),
                     delta_x=90,
                     samples=401,

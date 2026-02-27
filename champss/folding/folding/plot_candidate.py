@@ -209,7 +209,7 @@ def plot_candidate_archive(
 
     # Extract info from active pointing if available
     max_beam = None
-    dm_ne2001 = None
+    dm_ne2025 = None
     dm_ymw16 = None
     maxdm = None
     if ap is not None and len(ap) > 0:
@@ -222,7 +222,7 @@ def plot_candidate_archive(
     try:
         from beamformer.utilities.dm import DMMap
         dmm = DMMap()
-        dm_ne2001 = dmm.get_dm_ne2001(latitude=dec, longitude=ra)
+        dm_ne2025 = dmm.get_dm_ne2025(latitude=dec, longitude=ra)
         dm_ymw16 = dmm.get_dm_ymw16(latitude=dec, longitude=ra)
     except (ImportError, Exception) as e:
         print(e)
@@ -550,7 +550,7 @@ def plot_candidate_archive(
     # Format optional values
     sigma_str = f"{sigma:.2f}" if sigma is not None else "N/A"
     beam_str = f"{max_beam}" if max_beam is not None else "N/A"
-    ne2001_str = f"{dm_ne2001:.1f}" if dm_ne2001 is not None else "N/A"
+    ne2025_str = f"{dm_ne2025:.1f}" if dm_ne2025 is not None else "N/A"
     ymw16_str = f"{dm_ymw16:.1f}" if dm_ymw16 is not None else "N/A"
     maxdm_str = f"{maxdm:.1f}" if maxdm is not None else "N/A"
     dm_best_str = f"{dm_best:.2f}" if dm_best is not None else "N/A"
@@ -563,7 +563,7 @@ def plot_candidate_archive(
     # 5 columns x 4 rows layout
     cand_params_text = [
         [rf"{psr}", f"RA: {ra:.2f}", rf"$g_l$: {gal_l:.2f}", f"DM$_{{max}}$: {maxdm_str}", f"$\\Delta$F0: {df0_best_str}"],
-        [rf"{T0.isot[:10]}", f"Dec: {dec:.2f}", rf"$g_b$: {gal_b:.2f}", f"DM$_{{ne2001}}$: {ne2001_str}", f"F0$_{{best}}$: {f0_best_str}"],
+        [rf"{T0.isot[:10]}", f"Dec: {dec:.2f}", rf"$g_b$: {gal_b:.2f}", f"DM$_{{ne2025}}$: {ne2025_str}", f"F0$_{{best}}$: {f0_best_str}"],
         [rf"PS $\sigma$: {sigma_str}", f"DM: {dm:.2f}", f"Beam: {beam_str}", f"DM$_{{ymw16}}$: {ymw16_str}",f"P0$_{{best}}$: {P0_best_str}"],
         [rf"Fold $\sigma$: {SNR_val:.2f}", f"f0: {f0:.5f}", f"P0: {P0:.5f}", f"DM$_{{best}}$: {dm_best_str}" , f"F1: {f1_best_str}"],
     ]
@@ -672,7 +672,8 @@ def plot_candidate_archive(
         f"cand_{ra:.02f}_{dec:.02f}_{f0:.02f}_{dm:.02f}_{T0.isot[:10]}.png"
     )
 
-    plt.savefig(f'{coord_path}/{plotstring}', dpi=fig.dpi, bbox_inches="tight")
+    plt.savefig(f'{coord_path}/{plotstring}', dpi=150, bbox_inches="tight",
+                pil_kwargs={'optimize': True})
 
     img_path = f"{foldpath}/{T0.isot[:10]}-plots/"
     if not os.path.exists(img_path):
@@ -680,7 +681,8 @@ def plot_candidate_archive(
     else:
         print(f"Directory '{img_path}' already exists.")
     plot_fname = img_path + plotstring_radec
-    plt.savefig(plot_fname, dpi=fig.dpi, bbox_inches="tight")
+    plt.savefig(plot_fname, dpi=150, bbox_inches="tight",
+                pil_kwargs={'optimize': True})
     plt.close()
 
     return SNprof, SNR_val, plot_fname

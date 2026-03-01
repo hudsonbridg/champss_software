@@ -325,7 +325,7 @@ class PowerSpectraSearch:
                 all_arc_psrs = self.arc_filter_config["filtered_pulsars"]
                 arc = get_arc_for_beam(
                     current_pointing.beam_row,
-                    pspec.pspec.datetimes[-1],
+                    pspec.datetimes[-1],
                     +datetime.timedelta(seconds=current_pointing.length * TSAMP / 2),
                     delta_x=90,
                     samples=401,

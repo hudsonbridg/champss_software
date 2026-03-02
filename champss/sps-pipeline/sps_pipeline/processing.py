@@ -1908,11 +1908,15 @@ def start_processing_manager(
                     folder = date_to_process.strftime("%Y-%m-%d")
                     sigma_field = "fs_sigma"
                     min_sigma_folded = 7
+                    df_mp_filtered = df_mp[df_mp[sigma_field] > min_sigma_folded]
                 else:
                     survey = "stackcands"
                     folder = stack_name
                     sigma_field = "mdf_SN"
                     min_sigma_folded = 0
+                    df_mp_filtered = df_mp[
+                        (df_mp[sigma_field] > min_sigma_folded) | df_mp["mdf_SN"].isna()
+                    ]
                 try:
                     with (
                         CandidateViewerRegistrar(
@@ -1922,10 +1926,6 @@ def start_processing_manager(
                             survey_dir="/data/candidate_viewer/champss_candidate_viewer/surveys",  # path to the directory containing survey (project) config files
                         ) as sd
                     ):
-                        df_mp_filtered = df_mp[
-                            (df_mp[sigma_field] > min_sigma_folded)
-                            | df_mp["mdf_SN"].isna()
-                        ]
                         sd.add_candidates(
                             df_mp_filtered
                         )  # add candidates from dataframe

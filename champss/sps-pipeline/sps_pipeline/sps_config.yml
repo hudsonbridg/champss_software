@@ -149,13 +149,15 @@ ps:
     use_nsum_per_bin: True
     skip_first_n_bins: 5
     max_search_frequency: 250
+    injection_overlap_threshold: 0.2
+    injection_dm_threshold: 10
     cluster_config:
       dbscan_eps: 1
       dm_scale_factor: 0.02
       freq_scale_factor: 0.9
       dbscan_min_samples: 5
       filter_nharm: False
-      cluster_dm_cut: 2
+      cluster_dm_cut: 1
       max_ndetect: 200000
       overlap_scale: 1.5
       metric_combination: replace

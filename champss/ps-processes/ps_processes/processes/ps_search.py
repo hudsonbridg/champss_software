@@ -3,8 +3,8 @@
 import logging
 import time
 from functools import partial
-from multiprocessing import Pool, shared_memory
 import yaml
+from multiprocessing import Pool, shared_memory, set_start_method
 import datetime
 
 import numpy as np
@@ -174,9 +174,9 @@ class PowerSpectraSearch:
     def search(
         self,
         pspec,
-        injection_path,
-        injection_indices,
-        only_injections,
+        injection_path=None,
+        injection_indices=[],
+        only_injections=False,
         scale_injections=False,
     ):
         """
@@ -214,6 +214,9 @@ class PowerSpectraSearch:
             PowerSpectraDetectionClusters object with the properties of all the
             detections clusters from the pointing.
         """
+        # Spawn multiprocessing method does not work nicely with shared arrays
+        set_start_method("forkserver", force=True)
+
         ps_length = ((len(pspec.freq_labels)) // self.num_harm) * self.num_harm
         # compute harmonic bins based on power spectra properties
         if not self.precompute_harms:
@@ -239,6 +242,28 @@ class PowerSpectraSearch:
                         scale_injections=scale_injections,
                     )
                     injection_dicts.append(injection_dict)
+            elif "single" in injection_path:
+                split_parameters = injection_path.split(" ")
+                injection_dict = {
+                    "TPA_idx": int(
+                        float(split_parameters[1])
+                    ),  # Cast twice to remove ".""
+                    "frequency": float(split_parameters[2]),
+                    "DM": float(split_parameters[3]),
+                    "flux": float(split_parameters[4]),
+                    "profile": [],
+                }
+                injection_dicts.append(injection_dict)
+                log.info("Injecting at:")
+                log.info(f"DM: {injection_dict['DM']}")
+                log.info(f"frequency: {injection_dict['frequency']}")
+
+                injection_dict = ps_inject.main(
+                    pspec,
+                    self.full_harm_bins,
+                    injection_dict,
+                    scale_injections=scale_injections,
+                )
             else:
                 try:
                     with open(injection_path) as file:
@@ -699,7 +724,7 @@ class PowerSpectraSearch:
                             )
                             if (
                                 injection_overlap.size / len(sorted_harm_bins)
-                                > injection_overlap_threshold
+                                >= injection_overlap_threshold
                                 and np.abs(injection_dict["DM"] - dm)
                                 < injection_dm_threshold
                             ):

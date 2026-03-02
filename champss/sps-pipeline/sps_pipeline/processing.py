@@ -1746,11 +1746,8 @@ def start_processing_manager(
             if run_folding:
                 if mode == "pipeline":
                     daily_run = db_api.get_daily_run(date_to_process)
-                    input_csv = daily_run.classification_result["csv_file"]
-                    df_folded_name = (
-                        daily_run.classification_result["output_file"].rsplit("_", 1)[0]
-                        + "_folded.csv"
-                    )
+                    input_csv = daily_run.classification_result["output_file"]
+                    df_folded_name = input_csv.rsplit("_", 1)[0] + "_folded.csv"
                     args = ["--date", date_to_process]
                     class_min = 0.9
                 else:

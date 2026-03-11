@@ -20,8 +20,22 @@ class Fold:
     folding, used by both fold_candidate and fold_pulsar scripts.
     """
 
-    def __init__(self, ra, dec, f0, dm, date, ephem_path, foldpath, datpath, config,
-                 name=None, filterbank_to_ram=True, exact_coords=False, coord_path=None):
+    def __init__(
+        self,
+        ra,
+        dec,
+        f0,
+        dm,
+        date,
+        ephem_path,
+        foldpath,
+        datpath,
+        config,
+        name=None,
+        filterbank_to_ram=True,
+        exact_coords=False,
+        coord_path=None,
+    ):
         """
         Initialize Fold object.
 
@@ -63,8 +77,8 @@ class Fold:
         self.foldpath = foldpath
         self.datpath = datpath
         self.config = config
-        self.config['beamform']['update_db'] = False
-        self.config['beamform']['flatten_bandpass'] = False
+        self.config["beamform"]["update_db"] = False
+        self.config["beamform"]["flatten_bandpass"] = False
         self.name = name if name else candidate_name(ra, dec)
         self.filterbank_to_ram = filterbank_to_ram
         self.exact_coords = exact_coords
@@ -110,7 +124,9 @@ class Fold:
         if archive_basename is None:
             # Default: candidate format with f0 and dm
             archive_basename = f"cand_{self.f0:.02f}_{self.dm:.02f}"
-        self.archive_fname = f"{self.coord_path}/{archive_basename}_{year}-{month:02}-{day:02}"
+        self.archive_fname = (
+            f"{self.coord_path}/{archive_basename}_{year}-{month:02}-{day:02}"
+        )
 
         # Setup filterbank path
         fname = f"/{self.ra:.02f}_{self.dec:.02f}_{self.f0:.02f}_{self.dm:.02f}_{year}-{month:02}-{day:02}.fil"
@@ -132,16 +148,24 @@ class Fold:
             True if beamforming succeeded, False otherwise
         """
         if self.exact_coords:
-            log.info(f"Using exact coordinates (RA={self.ra:.6f}, Dec={self.dec:.6f}) without grid snapping")
+            log.info(
+                f"Using exact coordinates (RA={self.ra:.6f}, Dec={self.dec:.6f}) without grid snapping"
+            )
         else:
-            log.info(f"Using coordinates from pointing map (RA={self.ra:.2f}, Dec={self.dec:.2f})")
+            log.info(
+                f"Using coordinates from pointing map (RA={self.ra:.2f}, Dec={self.dec:.2f})"
+            )
 
         pst = PointingStrategist(create_db=False, split_long_pointing=True)
-        self.ap = pst.get_single_pointing(self.ra, self.dec, self.date, use_grid=not self.exact_coords)
+        self.ap = pst.get_single_pointing(
+            self.ra, self.dec, self.date, use_grid=not self.exact_coords
+        )
 
         # If multiple sub-pointings (at high dec), always write to disk (too large for RAM)
         if len(self.ap) > 1:
-            log.info(f"Multiple sub-pointings ({len(self.ap)}), writing filterbank to disk")
+            log.info(
+                f"Multiple sub-pointings ({len(self.ap)}), writing filterbank to disk"
+            )
             self.filterbank_to_ram = False
             self.config.beamform.beam_to_normalise = None
 
@@ -160,8 +184,12 @@ class Fold:
         if not os.path.isfile(self.fil):
             log.info(f"Beamforming {len(self.ap)} sub-pointing(s)...")
             fdmt = True
-            beamformer = beamform.initialise(self.config, rfi_beamform=True,
-                                             basepath=self.foldpath, datpath=self.datpath)
+            beamformer = beamform.initialise(
+                self.config,
+                rfi_beamform=True,
+                basepath=self.foldpath,
+                datpath=self.datpath,
+            )
 
             # Loop through all active pointings and append them into one filterbank
             for i, active_pointing in enumerate(self.ap):
@@ -173,15 +201,22 @@ class Fold:
                     )
                     active_pointing.nchan = self.nchan
 
-                log.info(f"Beamforming sub-pointing {i+1}/{len(self.ap)} with {self.num_threads} threads")
+                log.info(
+                    f"Beamforming sub-pointing {i + 1}/{len(self.ap)} with {self.num_threads} threads"
+                )
 
                 skybeam, spectra_shared = beamform.run(
-                    active_pointing, beamformer, fdmt, self.num_threads, self.foldpath
+                    active_pointing,
+                    beamformer,
+                    fdmt,
+                    False,
+                    self.num_threads,
+                    self.foldpath,
                 )
 
                 if skybeam is None:
                     log.warning(
-                        f"Insufficient unmasked data to form skybeam for sub-pointing {i+1}, skipping"
+                        f"Insufficient unmasked data to form skybeam for sub-pointing {i + 1}, skipping"
                     )
                     spectra_shared.close()
                     spectra_shared.unlink()
@@ -189,10 +224,10 @@ class Fold:
 
                 # Write first sub-pointing to create the file, append subsequent ones
                 if i == 0:
-                    log.info(f"Writing sub-pointing {i+1} to {self.fil}")
+                    log.info(f"Writing sub-pointing {i + 1} to {self.fil}")
                     skybeam.write(self.fil)
                 else:
-                    log.info(f"Appending sub-pointing {i+1} to {self.fil}")
+                    log.info(f"Appending sub-pointing {i + 1} to {self.fil}")
                     skybeam.append(self.fil)
 
                 spectra_shared.close()
@@ -285,7 +320,9 @@ class Fold:
             if alias_archive:
                 alias_results[label] = alias_archive
 
-        log.info(f"Completed alias folding: {len(alias_results)} of {len(alias_factors)} successful")
+        log.info(
+            f"Completed alias folding: {len(alias_results)} of {len(alias_factors)} successful"
+        )
 
         return alias_results
 
@@ -315,8 +352,8 @@ class Fold:
             foldpath_plots = self.foldpath + "/plots/folded_candidate_plots/"
 
         cand_info = {
-            'sigma': sigma,
-            'ap': self.ap,
+            "sigma": sigma,
+            "ap": self.ap,
         }
 
         SNprof, SN_arr, plot_fname = plot_candidate_archive(
